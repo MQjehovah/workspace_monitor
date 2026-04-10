@@ -1,0 +1,56 @@
+:root {
+  --bg-primary: #0F1623;
+  --bg-secondary: #1A2332;
+  --bg-card: #1E2A3A;
+  --accent-blue: #3B82F6;
+  --accent-green: #10B981;
+  --accent-orange: #F59E0B;
+  --accent-red: #EF4444;
+  --accent-purple: #8B5CF6;
+  --text-primary: #F1F5F9;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --border-subtle: #2D3F55;
+  --progress-track: #2D3F55;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, sans-serif;
+  margin: 0;
+}
+
+.dashboard {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.kpi-card {
+  background: var(--bg-card);
+  border-radius: 12px;
+  padding: 20px;
+  border: 1px solid var(--border-subtle);
+}
+
+.kpi-card.risk {
+  border-color: var(--accent-red);
+}
+
+.progress-bar {
+  background: var(--progress-track);
+  border-radius: 4px;
+  height: 6px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 4px;
+}
+
+#app {
+  width: 100%;
+  min-height: 100vh;
+}
