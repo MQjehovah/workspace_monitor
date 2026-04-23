@@ -45,34 +45,59 @@
         </div>
       </div>
 
-      <div class="goals-section" v-if="project.goals && project.goals.length > 0">
-        <h3>目标评分</h3>
-        <div class="goals-list">
-          <div v-for="goal in project.goals" :key="goal.id" class="goal-item">
-            <div class="goal-top">
-              <span class="goal-name">{{ goal.name }}</span>
-            </div>
-            <div class="goal-score-display">
-              <span class="score-num" :class="getScoreClass(goal.latest_score)">
-                {{ goal.latest_score !== null ? goal.latest_score.toFixed(1) : '未评分' }}
-              </span>
-              <span v-if="goal.latest_year && goal.latest_month" class="score-date">
-                {{ goal.latest_year }}/{{ goal.latest_month }}
-              </span>
-            </div>
-            <div class="goal-bar">
-              <div class="progress-bar">
-                <div class="progress-fill" :class="getScoreBarClass(goal.latest_score)" :style="{ width: (goal.latest_score || 0) + '%' }"></div>
+      <div class="tab-section">
+        <div class="tab-bar">
+          <button class="tab-btn" :class="{ active: activeTab === 'goals' }" @click="activeTab = 'goals'">目标评分</button>
+          <button class="tab-btn" :class="{ active: activeTab === 'milestones' }" @click="activeTab = 'milestones'">项目里程碑</button>
+        </div>
+
+        <template v-if="activeTab === 'goals'">
+          <div class="goals-list" v-if="project.goals && project.goals.length > 0">
+            <div v-for="goal in project.goals" :key="goal.id" class="goal-item">
+              <div class="goal-top">
+                <span class="goal-name">{{ goal.name }}</span>
+              </div>
+              <div class="goal-score-display">
+                <span class="score-num" :class="getScoreClass(goal.latest_score)">
+                  {{ goal.latest_score !== null ? goal.latest_score.toFixed(1) : '未评分' }}
+                </span>
+                <span v-if="goal.latest_year && goal.latest_month" class="score-date">
+                  {{ goal.latest_year }}/{{ goal.latest_month }}
+                </span>
+              </div>
+              <div class="goal-bar">
+                <div class="progress-bar">
+                  <div class="progress-fill" :class="getScoreBarClass(goal.latest_score)" :style="{ width: (goal.latest_score || 0) + '%' }"></div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+          <div v-else class="empty-hint">暂无目标数据</div>
 
-        <div class="project-score-summary">
-          <span>项目综合得分</span>
-          <span class="summary-score">{{ project.score.toFixed(1) }}</span>
-          <span class="summary-grade" :class="getGradeClass(project.score)">{{ getGrade(project.score) }}</span>
-        </div>
+          <div class="project-score-summary" v-if="project.goals && project.goals.length > 0">
+            <span>项目综合得分</span>
+            <span class="summary-score">{{ project.score.toFixed(1) }}</span>
+            <span class="summary-grade" :class="getGradeClass(project.score)">{{ getGrade(project.score) }}</span>
+          </div>
+        </template>
+
+        <template v-if="activeTab === 'milestones'">
+          <div class="timeline" v-if="project.milestones && project.milestones.length > 0">
+            <div v-for="(ms, idx) in sortedMilestones" :key="ms.id" class="tl-item" :class="{ last: idx === sortedMilestones.length - 1 }">
+              <div class="tl-left">
+                <div class="tl-dot" :class="{ done: ms.achieved }"></div>
+                <div class="tl-line" v-if="idx < sortedMilestones.length - 1"></div>
+              </div>
+              <div class="tl-content">
+                <div class="tl-date">{{ ms.due_date || '待定' }}</div>
+                <div class="tl-title">{{ ms.event || ms.group_name }}</div>
+                <div v-if="ms.group_name && ms.event" class="tl-group">{{ ms.group_name }}</div>
+                <span v-if="ms.achieved" class="tl-badge">已完成</span>
+              </div>
+            </div>
+          </div>
+          <div v-else class="empty-hint">暂无里程碑数据</div>
+        </template>
       </div>
     </div>
 
@@ -100,12 +125,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useProjectStore } from '@/stores/project'
 
 const route = useRoute()
 const store = useProjectStore()
+const activeTab = ref<'goals' | 'milestones'>('goals')
 
 const getStatusText = (status: string) => {
   const map: Record<string, string> = { healthy: '健康', warning: '需关注', risk: '高风险' }
@@ -147,6 +173,15 @@ onMounted(async () => {
 })
 
 const project = computed(() => store.currentProject)
+
+const sortedMilestones = computed(() => {
+  if (!project.value?.milestones) return []
+  return [...project.value.milestones].sort((a, b) => {
+    if (!a.due_date) return 1
+    if (!b.due_date) return -1
+    return a.due_date.localeCompare(b.due_date)
+  })
+})
 </script>
 
 <style scoped>
@@ -278,6 +313,119 @@ const project = computed(() => store.currentProject)
   background: var(--bg-card);
   padding: 16px;
   border-radius: 12px;
+}
+
+.tab-section {
+  background: var(--bg-card);
+  padding: 16px;
+  border-radius: 12px;
+}
+
+.tab-bar {
+  display: flex;
+  border-bottom: 2px solid var(--border-subtle);
+  margin-bottom: 12px;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 10px 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+}
+
+.tab-btn.active {
+  color: var(--accent-blue);
+  border-bottom-color: var(--accent-blue);
+}
+
+.empty-hint {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.timeline {
+  padding: 4px 0;
+}
+
+.tl-item {
+  display: flex;
+  gap: 12px;
+  min-height: 60px;
+}
+
+.tl-left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 20px;
+  flex-shrink: 0;
+}
+
+.tl-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  border: 2px solid var(--bg-card);
+  box-shadow: 0 0 0 2px var(--text-muted);
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.tl-dot.done {
+  background: var(--accent-green);
+  box-shadow: 0 0 0 2px var(--accent-green);
+}
+
+.tl-line {
+  width: 2px;
+  flex: 1;
+  background: var(--border-subtle);
+  margin: 4px 0;
+}
+
+.tl-content {
+  flex: 1;
+  padding-bottom: 16px;
+}
+
+.tl-date {
+  font-size: 11px;
+  color: var(--accent-blue);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.tl-title {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.tl-group {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.tl-badge {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--accent-green);
 }
 
 .goals-section h3 {

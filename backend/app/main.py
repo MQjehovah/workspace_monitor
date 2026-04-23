@@ -3,11 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 import json
 from app.database import get_db, engine, Base
-from app.models import Project, Goal, GoalScore
+from app.models import Project, Goal, GoalScore, Milestone
 from app.schemas import (
     ProjectCreate, Project as ProjectSchema, StatsResponse,
     GoalCreate, GoalUpdate, GoalOut,
     GoalScoreCreate, GoalScoreOut, ProjectWithGoals, GoalWithLatestScore,
+    MilestoneCreate, MilestoneUpdate, MilestoneOut,
 )
 from app.websocket import manager
 
@@ -51,6 +52,15 @@ def recompute_project_score(db: Session, project_id: int):
         project.score = round(sum(s.score for s in current_month_scores) / len(current_month_scores), 1)
     else:
         project.score = 0.0
+
+    if project.score >= 80:
+        project.status = "healthy"
+    elif project.score >= 60:
+        project.status = "warning"
+    else:
+        project.status = "risk"
+    project.achievement_rate = round(project.score, 1)
+    project.progress = round(min(100, project.score * 1.15), 1)
     db.commit()
 
 
@@ -75,6 +85,13 @@ def build_goal_with_latest(goal: Goal) -> GoalWithLatestScore:
 
 def build_project_with_goals(project: Project) -> ProjectWithGoals:
     goals_data = [build_goal_with_latest(g) for g in project.goals]
+    milestones_data = [
+        MilestoneOut(
+            id=m.id, project_id=m.project_id,
+            group_name=m.group_name, due_date=m.due_date,
+            event=m.event, achieved=m.achieved, note=m.note,
+        ) for m in project.milestones
+    ]
     return ProjectWithGoals(
         id=project.id,
         name=project.name,
@@ -86,6 +103,7 @@ def build_project_with_goals(project: Project) -> ProjectWithGoals:
         status=project.status,
         target_date=project.target_date,
         goals=goals_data,
+        milestones=milestones_data,
     )
 
 
@@ -201,6 +219,48 @@ async def delete_score(score_id: int, db: Session = Depends(get_db)):
     db.commit()
     if project_id:
         recompute_project_score(db, project_id)
+    return {"status": "deleted"}
+
+
+@app.get("/api/projects/{project_id}/milestones", response_model=list[MilestoneOut])
+async def list_milestones(project_id: int, db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return db.query(Milestone).filter(Milestone.project_id == project_id).order_by(Milestone.due_date).all()
+
+
+@app.post("/api/projects/{project_id}/milestones", response_model=MilestoneOut, status_code=201)
+async def create_milestone(project_id: int, data: MilestoneCreate, db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    m = Milestone(project_id=project_id, **data.model_dump())
+    db.add(m)
+    db.commit()
+    db.refresh(m)
+    return m
+
+
+@app.put("/api/milestones/{milestone_id}", response_model=MilestoneOut)
+async def update_milestone(milestone_id: int, data: MilestoneUpdate, db: Session = Depends(get_db)):
+    m = db.query(Milestone).filter(Milestone.id == milestone_id).first()
+    if not m:
+        raise HTTPException(status_code=404, detail="Milestone not found")
+    for key, value in data.model_dump(exclude_unset=True).items():
+        setattr(m, key, value)
+    db.commit()
+    db.refresh(m)
+    return m
+
+
+@app.delete("/api/milestones/{milestone_id}")
+async def delete_milestone(milestone_id: int, db: Session = Depends(get_db)):
+    m = db.query(Milestone).filter(Milestone.id == milestone_id).first()
+    if not m:
+        raise HTTPException(status_code=404, detail="Milestone not found")
+    db.delete(m)
+    db.commit()
     return {"status": "deleted"}
 
 
@@ -441,6 +501,141 @@ MARCH_SCORES = {
 }
 
 
+from datetime import date as date_type
+
+MILESTONES_SEED = {
+    "MTPF提升专项": [
+        {"group": "研发分阶段提供提升专项版本", "date": "2026-04-30", "event": "发布一个专项版本（V1）"},
+        {"group": "研发分阶段提供提升专项版本", "date": "2026-06-30", "event": "研发框架重构完成 + 工单问题解决50%"},
+        {"group": "研发分阶段提供提升专项版本", "date": "2026-07-31", "event": "发布一个专项版本（V2）"},
+        {"group": "研发分阶段提供提升专项版本", "date": "2026-10-31", "event": "发布一个专项版本（V3）"},
+        {"group": "研发分阶段提供提升专项版本", "date": "2026-12-31", "event": "工单问题解决超过85%，MTBF和1460指标分别达成400h和2000h"},
+        {"group": "质量跟踪工单TOP问题解决", "date": "2026-03-31", "event": "各月跟踪jira回归和关闭的执行情况"},
+        {"group": "质量跟踪工单TOP问题解决", "date": "2026-06-30", "event": "各月跟踪jira回归和关闭的执行情况"},
+        {"group": "质量跟踪工单TOP问题解决", "date": "2026-09-30", "event": "各月跟踪jira回归和关闭的执行情况"},
+        {"group": "质量跟踪工单TOP问题解决", "date": "2026-12-31", "event": "各月跟踪jira回归和关闭的执行情况"},
+        {"group": "工程服务完成涉及现场的版本部署", "date": "2026-05-30", "event": "专项版本（V1）60%部署"},
+        {"group": "工程服务完成涉及现场的版本部署", "date": "2026-06-30", "event": "专项版本（V1）100%部署"},
+        {"group": "工程服务完成涉及现场的版本部署", "date": "2026-09-30", "event": "专项版本（V2）100%部署"},
+        {"group": "工程服务完成涉及现场的版本部署", "date": "2026-12-31", "event": "专项版本（V3）100%部署"},
+    ],
+    "8H部署专项": [
+        {"group": "SW GT按照MRD完成易部署功能开发", "date": "2026-04-30", "event": "4月15日完成第一阶段开发，4月30日上线"},
+        {"group": "SW GT按照MRD完成易部署功能开发", "date": "2026-07-31", "event": "6月30日完成第二阶段功能开发，7月30日上线"},
+        {"group": "SW GT按照MRD完成易部署功能开发", "date": "2026-09-30", "event": "预研功能（远程部署支持），9月30日上线"},
+        {"group": "Titan 810产品易部署功能开发", "date": "2026-04-15", "event": "完成Titan 810产品易部署MRD评审"},
+        {"group": "Titan 810产品易部署功能开发", "date": "2026-04-30", "event": "完成易部署功能开发计划评审，FAE完成培训和部署流程优化"},
+        {"group": "FAE能力建设", "date": "2026-04-07", "event": "输出Q1部署总结"},
+        {"group": "FAE能力建设", "date": "2026-06-30", "event": "完成FAE集中培训"},
+        {"group": "FAE能力建设", "date": "2026-08-30", "event": "基于SW GT易部署第二阶段功能上线，FAE完成培训"},
+    ],
+    "数字中台专项": [
+        {"group": "硬件部署与系统导入", "date": "2026-04-30", "event": "完成服务器硬件架设，CRM上线、启动用友ERP财务系统部署"},
+        {"group": "系统联调与测试", "date": "2026-04-30", "event": "MES系统上线，中台升级对接新系统，完成数据清洗"},
+        {"group": "上线冲刺与试运行", "date": "2026-06-30", "event": "完成用友正式环境构建、集成代码部署，打通经营全流程"},
+        {"group": "关键流程打通与看板上线", "date": "2026-06-30", "event": "全新数字中台正式投入使用，支撑月底结账、报表出具"},
+        {"group": "完成AI基础能力搭建", "date": "2026-08-31", "event": "构建统一的算力管理知识库和agent能力"},
+        {"group": "\"0号员工\"上线", "date": "2026-08-31", "event": "AI数字交互实现，完成数据汇总与分析，支撑运营管理"},
+    ],
+    "质量提升专项": [
+        {"group": "筹备成长期（Q2末）", "date": "2026-06-30", "event": "完成商务流程梳理、合同变更管控标准制定、异常率降至6%以内"},
+        {"group": "冲刺提升期（Q3末）", "date": "2026-09-30", "event": "合同异常率控制在5%以下、非正常优惠合同比例控制在10%以内"},
+        {"group": "闭环收尾期（Q4末）", "date": "2026-12-31", "event": "全年商务质量目标持续达标，复盘全年工作"},
+        {"group": "测试泄漏率降低", "date": "2026-06-30", "event": "版本测试自动化试点；完成Q2现场问题专项排雷"},
+        {"group": "测试泄漏率降低", "date": "2026-09-30", "event": "完成Q3现场问题专项排雷；开发代码静动态审查纳入门禁"},
+        {"group": "测试泄漏率降低", "date": "2026-12-31", "event": "完成Q4现场问题专项排雷"},
+        {"group": "JIRA关闭提升", "date": "2026-04-30", "event": "团队及个人jira问题处理进展上大屏，实时通报"},
+        {"group": "JIRA关闭提升", "date": "2026-05-31", "event": "长期未解决jira单每周专项解决；jira处理进展纳入员工绩效"},
+        {"group": "JIRA关闭提升", "date": "2026-08-31", "event": "JIRA处理流程优化，应用自动化工具提升效率"},
+        {"group": "采购质量体系搭建", "date": "2026-06-30", "event": "体系搭建与标准夯实，规范检验流程"},
+        {"group": "采购质量体系搭建", "date": "2026-09-30", "event": "深度审核与精准优化"},
+        {"group": "采购质量体系搭建", "date": "2026-12-31", "event": "优胜劣汰与全面闭环"},
+        {"group": "消除独家", "date": "2026-06-30", "event": "GT非独家供应商占比达85%，T810达65%"},
+        {"group": "生产过程质量", "date": "2026-06-30", "event": "现状排查及生产过程管控，建立包装标准化作业指导书"},
+        {"group": "生产过程质量", "date": "2026-08-31", "event": "检测过程优化，推行工位扫码质检机制"},
+        {"group": "生产过程质量", "date": "2026-10-31", "event": "人员能力提升，实施关键工序100%防错"},
+        {"group": "生产过程质量", "date": "2026-12-31", "event": "流程闭环优化，建立下线全性能测试标准"},
+        {"group": "售后质量", "date": "2026-06-30", "event": "国内中心仓库准备完毕；海外欧洲、北美建立中心仓库"},
+        {"group": "售后质量", "date": "2026-09-30", "event": "国内前置仓准备完毕；服务商24小时接单率95%"},
+        {"group": "售后质量", "date": "2026-11-30", "event": "海外前置仓准备完毕；第三方服务占比40%"},
+        {"group": "售后质量", "date": "2026-12-31", "event": "完成公司外包管理标准；完成10次+代理商培训"},
+    ],
+    "渠道管理能力提升": [
+        {"group": "经销商拓展（Q2末）", "date": "2026-06-30", "event": "累计新增15个经销商、收入达到4600万、存销比2:1、复购率25%"},
+        {"group": "经销商拓展（Q3末）", "date": "2026-09-30", "event": "累计新增20个经销商、收入11000万、存销比1.5:1、复购率70%"},
+        {"group": "经销商拓展（Q4末）", "date": "2026-12-31", "event": "收入1.6亿、存销比与复购率持续达标，30个新增经销商稳定运营"},
+        {"group": "服务收费（Q2末）", "date": "2026-06-30", "event": "经销商POC、开局、现场服务等收费标准确定"},
+        {"group": "服务收费（Q3末）", "date": "2026-09-30", "event": "完成国内国际所有新签经销商服务收费合同确立"},
+        {"group": "服务收费（Q4末）", "date": "2026-12-31", "event": "国外经销商60%，国内30%比例的经销商合同服务比例"},
+    ],
+    "Marketing能力提升": [
+        {"group": "筹备成长期（Q2末）", "date": "2026-06-30", "event": "搭建毛利率与应收周转监控体系，毛利率≥40%、应收周转≤55天"},
+        {"group": "冲刺提升期（Q3末）", "date": "2026-09-30", "event": "毛利率≥50%、应收周转≤46天，达成全年目标"},
+        {"group": "闭环收尾期（Q4末）", "date": "2026-12-31", "event": "毛利率稳定≥60%、应收周转稳定≤40天"},
+    ],
+    "政府资金专项": [
+        {"group": "南京资金", "date": "2026-12-31", "event": "南京政府资金500万元获批"},
+        {"group": "嘉兴1500万", "date": "2026-05-31", "event": "完成嘉兴项目公司注册及人才项目申请"},
+        {"group": "嘉兴1500万", "date": "2026-07-31", "event": "申报创业人才项目；申请设备投资补助300万元"},
+        {"group": "嘉兴1500万", "date": "2026-11-30", "event": "获批1345万元"},
+        {"group": "深圳1000万", "date": "2026-04-30", "event": "收集深圳各地政策"},
+        {"group": "深圳1000万", "date": "2026-06-30", "event": "注册深圳落地公司"},
+        {"group": "深圳1000万", "date": "2026-11-30", "event": "获批1000万元"},
+        {"group": "房租减免", "date": "2026-04-30", "event": "C17栋减免房租155万+红枫科技园减免432万"},
+        {"group": "到账资金", "date": "2026-03-31", "event": "到账300万元"},
+        {"group": "到账资金", "date": "2026-05-31", "event": "到账150万元"},
+        {"group": "到账资金", "date": "2026-08-31", "event": "红枫科技园装修款500万元"},
+        {"group": "到账资金", "date": "2026-12-31", "event": "嘉兴南湖750万到账、80万到账、500万获批"},
+    ],
+    "降本专项": [
+        {"group": "GT非独家物料", "date": "2026-06-30", "event": "一类物料完成度达90%、二类达75%、三类达90%、四类达50%"},
+        {"group": "T810非独家物料", "date": "2026-06-30", "event": "一类物料完成度达70%、二类达60%、三类达80%、四类达40%"},
+        {"group": "GT BOM成本降低", "date": "2026-07-31", "event": "7月起GT各版本发货成本降低1万元/台"},
+        {"group": "GT包装成本降低", "date": "2026-07-31", "event": "7月起单套包装成本降低30%（330元/套）"},
+        {"group": "810 BOM成本降低", "date": "2026-07-31", "event": "7月起810机器加工作站发货成本降低3万元/台"},
+        {"group": "810包装成本降低", "date": "2026-07-31", "event": "7月起单套包装成本降低30%（707元/套）"},
+    ],
+    "生产提效降费专项": [
+        {"group": "Q1目标", "date": "2026-03-31", "event": "生产成本占比10%"},
+        {"group": "Q2目标", "date": "2026-06-30", "event": "生产成本占比8%"},
+        {"group": "Q3目标", "date": "2026-09-30", "event": "生产成本占比7%"},
+        {"group": "Q4目标", "date": "2026-11-30", "event": "生产成本占比6%"},
+    ],
+    "库存周转专项": [
+        {"group": "库存周转天数", "date": "2026-06-30", "event": "库存周转天数达120天"},
+        {"group": "库存周转天数", "date": "2026-09-30", "event": "库存周转天数达90天"},
+        {"group": "库存周转天数", "date": "2026-12-31", "event": "库存周转天数达55天"},
+        {"group": "发货预测准确率", "date": "2026-06-30", "event": "1周100%、4周85%、5周70%"},
+        {"group": "发货预测准确率", "date": "2026-12-31", "event": "1周100%、4周85%、5周70%（全年维持）"},
+    ],
+    "预算管理能力提升专项": [
+        {"group": "规则制定", "date": "2026-03-31", "event": "初步制定全面预算管理规则"},
+        {"group": "规则执行", "date": "2026-04-30", "event": "执行全面预算管理规则，输出3月现金流执行报告"},
+        {"group": "半年复盘", "date": "2026-06-30", "event": "半年预算复盘会，6月经营性净现金流应为正"},
+        {"group": "规则执行", "date": "2026-09-30", "event": "组织Q3预算复盘会"},
+        {"group": "全年目标", "date": "2026-12-31", "event": "全年经营性净现金流为正"},
+    ],
+    "核算能力提升专项": [
+        {"group": "中台上线前", "date": "2026-03-31", "event": "协调台账建立，出报表预测"},
+        {"group": "中台上线前", "date": "2026-04-30", "event": "按周出收入成本预测数据"},
+        {"group": "中台上线", "date": "2026-06-30", "event": "中台上线"},
+        {"group": "中台上线后", "date": "2026-08-30", "event": "达成7天出报表要求"},
+    ],
+    "人力提效专项": [
+        {"group": "方案确定", "date": "2026-03-31", "event": "薪酬制度优化方案、绩效考核方案确定"},
+        {"group": "人才到岗", "date": "2026-04-30", "event": "5个高密度岗位交付"},
+        {"group": "人才到岗", "date": "2026-05-31", "event": "3个高密度岗位交付"},
+        {"group": "动态预算", "date": "2026-06-30", "event": "动态预算及周期内人力配置计划确定"},
+        {"group": "动态预算", "date": "2026-09-30", "event": "动态预算及周期内人力配置计划确定"},
+    ],
+    "人力降费专项": [
+        {"group": "主体成立", "date": "2026-04-30", "event": "深圳主体成立，设立社保公积金公司账号"},
+        {"group": "用工切换", "date": "2026-05-15", "event": "用工方式切换（代理20人、外包14人）"},
+        {"group": "采购降本", "date": "2026-06-30", "event": "人力资源服务商采购降本"},
+    ],
+}
+
+
 @app.post("/api/seed")
 async def seed_projects(db: Session = Depends(get_db)):
     if db.query(Project).first():
@@ -475,15 +670,27 @@ async def seed_projects(db: Session = Depends(get_db)):
                     comment=march.get("comment"),
                 ))
 
+        milestones = MILESTONES_SEED.get(p_data["name"], [])
+        for ms in milestones:
+            due = None
+            if ms.get("date"):
+                due = date_type.fromisoformat(ms["date"])
+            db.add(Milestone(
+                project_id=project.id,
+                group_name=ms.get("group"),
+                due_date=due,
+                event=ms.get("event"),
+            ))
+
     db.commit()
 
     for p in db.query(Project).all():
         recompute_project_score(db, p.id)
 
     for p in db.query(Project).all():
-        if p.score >= 70:
+        if p.score >= 80:
             p.status = "healthy"
-        elif p.score >= 40:
+        elif p.score >= 60:
             p.status = "warning"
         else:
             p.status = "risk"
@@ -494,6 +701,7 @@ async def seed_projects(db: Session = Depends(get_db)):
     count = db.query(Project).count()
     goal_count = db.query(Goal).count()
     score_count = db.query(GoalScore).count()
+    ms_count = db.query(Milestone).count()
     return {
-        "message": f"Seeded {count} projects, {goal_count} goals, {score_count} scores",
+        "message": f"Seeded {count} projects, {goal_count} goals, {score_count} scores, {ms_count} milestones",
     }

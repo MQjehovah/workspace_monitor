@@ -20,15 +20,22 @@
     <div v-else class="admin-content">
       <div class="toolbar">
         <div class="toolbar-left">
-          <h2>{{ currentProject?.name }} — 目标管理</h2>
+          <h2>{{ currentProject?.name }}</h2>
           <span class="toolbar-info">综合得分：<strong>{{ currentProject?.score?.toFixed(1) }}</strong></span>
         </div>
         <div class="toolbar-right">
-          <button class="btn-primary" @click="openAddGoal">+ 添加目标</button>
+          <div class="admin-tabs">
+            <button class="admin-tab" :class="{ active: adminTab === 'goals' }" @click="adminTab = 'goals'">目标评分</button>
+            <button class="admin-tab" :class="{ active: adminTab === 'milestones' }" @click="adminTab = 'milestones'">里程碑</button>
+          </div>
+          <button v-if="adminTab === 'goals'" class="btn-primary" @click="openAddGoal">+ 添加目标</button>
+          <button v-else class="btn-primary" @click="openAddMilestone">+ 添加里程碑</button>
         </div>
       </div>
 
-      <table class="goal-table" v-if="goals.length > 0">
+      <!-- Goals Tab -->
+      <template v-if="adminTab === 'goals'">
+        <table class="goal-table" v-if="goals.length > 0">
         <thead>
           <tr>
             <th style="width: 30px">#</th>
@@ -64,6 +71,65 @@
         </tbody>
       </table>
       <div v-else class="empty-state">暂无目标，请点击「添加目标」</div>
+      </template>
+
+      <!-- Milestones Tab -->
+      <template v-if="adminTab === 'milestones'">
+        <table class="goal-table" v-if="milestones.length > 0">
+          <thead>
+            <tr>
+              <th style="width: 40px">状态</th>
+              <th>里程碑</th>
+              <th style="width: 120px">截止日期</th>
+              <th style="width: 200px">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="ms in milestones" :key="ms.id">
+              <td class="center">
+                <button class="achieve-toggle" :class="{ done: ms.achieved }" @click="toggleMilestone(ms)">
+                  {{ ms.achieved ? '✓' : '○' }}
+                </button>
+              </td>
+              <td>
+                <div class="ms-event-text">{{ ms.event || ms.group_name }}</div>
+                <div v-if="ms.group_name && ms.event" class="ms-group-text">{{ ms.group_name }}</div>
+              </td>
+              <td class="center muted">{{ ms.due_date || '-' }}</td>
+              <td>
+                <div class="action-btns">
+                  <button class="btn-sm btn-edit" @click="openEditMilestone(ms)">编辑</button>
+                  <button class="btn-sm btn-danger" @click="handleDeleteMilestone(ms.id)">删除</button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-else class="empty-state">暂无里程碑，请点击「添加里程碑」</div>
+      </template>
+    </div>
+
+    <!-- Milestone Add/Edit Modal -->
+    <div v-if="showMsModal" class="modal-mask" @click.self="showMsModal = false">
+      <div class="modal-box">
+        <h3>{{ editingMsId ? '编辑里程碑' : '添加里程碑' }}</h3>
+        <div class="form-group">
+          <label>里程碑名称</label>
+          <input v-model="msForm.event" class="form-input" placeholder="里程碑事件描述" />
+        </div>
+        <div class="form-group">
+          <label>分组名称（可选）</label>
+          <input v-model="msForm.group_name" class="form-input" placeholder="关键里程碑分组" />
+        </div>
+        <div class="form-group">
+          <label>截止日期</label>
+          <input v-model="msForm.due_date" type="date" class="form-input" />
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" @click="showMsModal = false">取消</button>
+          <button class="btn-primary" @click="handleSaveMilestone" :disabled="!msForm.event.trim()">保存</button>
+        </div>
+      </div>
     </div>
 
     <!-- Add / Edit Goal Modal -->
@@ -165,8 +231,8 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useProjectStore } from '@/stores/project'
-import { getGoalScores } from '@/api'
-import type { GoalWithLatestScore, GoalScore } from '@/api'
+import { getGoalScores, getMilestones, createMilestone, updateMilestone, deleteMilestone } from '@/api'
+import type { GoalWithLatestScore, GoalScore, Milestone as MilestoneType } from '@/api'
 import dayjs from 'dayjs'
 
 const store = useProjectStore()
@@ -192,6 +258,12 @@ const scoreForm = reactive({
 const historyGoal = ref<GoalWithLatestScore | null>(null)
 const historyScores = ref<GoalScore[]>([])
 
+const adminTab = ref<'goals' | 'milestones'>('goals')
+const milestones = ref<MilestoneType[]>([])
+const showMsModal = ref(false)
+const editingMsId = ref<number | null>(null)
+const msForm = reactive({ event: '', group_name: '', due_date: '' })
+
 const toast = ref<{ msg: string; type: string } | null>(null)
 const showToast = (msg: string, type = 'success') => {
   toast.value = { msg, type }
@@ -205,10 +277,13 @@ onMounted(async () => {
 const loadGoals = async () => {
   if (!selectedProjectId.value) {
     goals.value = []
+    milestones.value = []
     return
   }
-  const detail = await store.fetchProjectDetail(Number(selectedProjectId.value))
+  const pid = Number(selectedProjectId.value)
+  const detail = await store.fetchProjectDetail(pid)
   goals.value = detail?.goals ?? []
+  milestones.value = detail?.milestones ?? []
 }
 
 const projects = computed(() => store.projects)
@@ -279,6 +354,56 @@ const handleScore = async () => {
   await store.fetchProjects()
   await store.fetchStats()
   showToast('评分已提交')
+}
+
+const openAddMilestone = () => {
+  editingMsId.value = null
+  msForm.event = ''
+  msForm.group_name = ''
+  msForm.due_date = ''
+  showMsModal.value = true
+}
+
+const openEditMilestone = (ms: MilestoneType) => {
+  editingMsId.value = ms.id
+  msForm.event = ms.event || ''
+  msForm.group_name = ms.group_name || ''
+  msForm.due_date = ms.due_date || ''
+  showMsModal.value = true
+}
+
+const handleSaveMilestone = async () => {
+  if (!msForm.event.trim() || !selectedProjectId.value) return
+  const pid = Number(selectedProjectId.value)
+  if (editingMsId.value) {
+    await updateMilestone(editingMsId.value, {
+      event: msForm.event.trim(),
+      group_name: msForm.group_name.trim() || undefined,
+      due_date: msForm.due_date || undefined,
+    })
+    showToast('里程碑已更新')
+  } else {
+    await createMilestone(pid, {
+      event: msForm.event.trim(),
+      group_name: msForm.group_name.trim() || undefined,
+      due_date: msForm.due_date || undefined,
+    })
+    showToast('里程碑已添加')
+  }
+  showMsModal.value = false
+  await loadGoals()
+}
+
+const handleDeleteMilestone = async (id: number) => {
+  if (!confirm('确定删除该里程碑？')) return
+  await deleteMilestone(id)
+  showToast('里程碑已删除', 'warn')
+  await loadGoals()
+}
+
+const toggleMilestone = async (ms: MilestoneType) => {
+  await updateMilestone(ms.id, { achieved: !ms.achieved })
+  await loadGoals()
 }
 
 const openHistoryModal = async (goal: GoalWithLatestScore) => {
@@ -621,5 +746,60 @@ const handleDeleteScore = async (scoreId: number) => {
 .toast-leave-to {
   opacity: 0;
   transform: translateX(-50%) translateY(20px);
+}
+
+.admin-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.admin-tab {
+  padding: 6px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.admin-tab.active {
+  background: var(--accent-blue);
+  color: white;
+  border-color: var(--accent-blue);
+}
+
+.achieve-toggle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.achieve-toggle.done {
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+  color: white;
+}
+
+.ms-event-text {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.ms-group-text {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
 }
 </style>

@@ -116,33 +116,60 @@
     <!-- Goal Score Detail Panel -->
     <section v-if="selectedProject" class="goal-section">
       <div class="goal-header">
-        <h2 class="section-title">{{ selectedProject.name }} — 目标评分明细</h2>
+        <h2 class="section-title">{{ selectedProject.name }} — 详情</h2>
         <button class="btn-close" @click="selectedProject = null">关闭</button>
       </div>
-      <div class="goal-cards">
-        <div v-for="goal in selectedProject.goals" :key="goal.id" class="goal-card">
-          <div class="goal-name">{{ goal.name }}</div>
-          <div class="goal-score-row">
-            <span class="goal-score-label">最新评分</span>
-            <span class="goal-score-value" :class="getScoreClass(goal.latest_score)">
-              {{ goal.latest_score !== null ? goal.latest_score.toFixed(1) : '未评分' }}
-            </span>
-            <span v-if="goal.latest_year && goal.latest_month" class="goal-score-date">
-              ({{ goal.latest_year }}年{{ goal.latest_month }}月)
-            </span>
-          </div>
-          <div class="goal-score-bar">
-            <div class="progress-bar">
-              <div class="progress-fill" :class="getScoreBarClass(goal.latest_score)" :style="{ width: (goal.latest_score || 0) + '%' }"></div>
+      <div class="tab-bar">
+        <button class="tab-btn" :class="{ active: detailTab === 'goals' }" @click="detailTab = 'goals'">目标评分</button>
+        <button class="tab-btn" :class="{ active: detailTab === 'milestones' }" @click="detailTab = 'milestones'">项目里程碑</button>
+      </div>
+
+      <!-- Goals Tab -->
+      <div v-if="detailTab === 'goals'" class="tab-content">
+        <div class="goal-cards">
+          <div v-for="goal in selectedProject.goals" :key="goal.id" class="goal-card">
+            <div class="goal-name">{{ goal.name }}</div>
+            <div class="goal-score-row">
+              <span class="goal-score-label">最新评分</span>
+              <span class="goal-score-value" :class="getScoreClass(goal.latest_score)">
+                {{ goal.latest_score !== null ? goal.latest_score.toFixed(1) : '未评分' }}
+              </span>
+              <span v-if="goal.latest_year && goal.latest_month" class="goal-score-date">
+                ({{ goal.latest_year }}年{{ goal.latest_month }}月)
+              </span>
+            </div>
+            <div class="goal-score-bar">
+              <div class="progress-bar">
+                <div class="progress-fill" :class="getScoreBarClass(goal.latest_score)" :style="{ width: (goal.latest_score || 0) + '%' }"></div>
+              </div>
             </div>
           </div>
         </div>
+        <div class="goal-summary">
+          <span class="summary-label">项目综合得分</span>
+          <span class="summary-value">{{ selectedProject.score.toFixed(1) }}</span>
+          <span class="summary-grade">{{ getGrade(selectedProject.score) }}</span>
+          <span class="summary-hint">（当月已评分目标的平均值）</span>
+        </div>
       </div>
-      <div class="goal-summary">
-        <span class="summary-label">项目综合得分</span>
-        <span class="summary-value">{{ selectedProject.score.toFixed(1) }}</span>
-        <span class="summary-grade">{{ getGrade(selectedProject.score) }}</span>
-        <span class="summary-hint">（所有目标最新月份评分的平均值）</span>
+
+      <!-- Milestones Tab -->
+      <div v-if="detailTab === 'milestones'" class="tab-content">
+        <div v-if="selectedProject.milestones && selectedProject.milestones.length > 0" class="milestone-list">
+          <div v-for="ms in selectedProject.milestones" :key="ms.id" class="milestone-item">
+            <div class="ms-left">
+              <span class="ms-status" :class="{ done: ms.achieved }">{{ ms.achieved ? '✓' : '○' }}</span>
+            </div>
+            <div class="ms-body">
+              <div class="ms-event">{{ ms.event || ms.group_name }}</div>
+              <div class="ms-meta">
+                <span v-if="ms.group_name && ms.event" class="ms-group">{{ ms.group_name }}</span>
+                <span v-if="ms.due_date" class="ms-date">{{ ms.due_date }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div v-else class="empty-hint">暂无里程碑数据</div>
       </div>
     </section>
   </div>
@@ -156,6 +183,7 @@ import dayjs from 'dayjs'
 
 const store = useProjectStore()
 const selectedProject = ref<ProjectWithGoals | null>(null)
+const detailTab = ref<'goals' | 'milestones'>('goals')
 
 const currentTime = computed(() => dayjs().format('YYYY-MM-DD HH:mm'))
 
@@ -505,5 +533,103 @@ onMounted(() => {
   font-size: 12px;
   color: var(--text-muted);
   margin-left: auto;
+}
+
+.tab-bar {
+  display: flex;
+  gap: 0;
+  margin-top: 16px;
+  border-bottom: 2px solid var(--border-subtle);
+}
+
+.tab-btn {
+  padding: 8px 20px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+}
+
+.tab-btn.active {
+  color: var(--accent-blue);
+  border-bottom-color: var(--accent-blue);
+}
+
+.tab-content {
+  margin-top: 16px;
+}
+
+.milestone-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.milestone-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.milestone-item:hover {
+  border-color: var(--accent-blue);
+}
+
+.ms-left {
+  padding-top: 2px;
+}
+
+.ms-status {
+  font-size: 16px;
+  color: var(--text-muted);
+}
+
+.ms-status.done {
+  color: var(--accent-green);
+  font-weight: 700;
+}
+
+.ms-body {
+  flex: 1;
+}
+
+.ms-event {
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
+.ms-meta {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.ms-group {
+  font-size: 11px;
+  color: var(--accent-purple);
+  background: rgba(139, 92, 246, 0.1);
+  padding: 1px 8px;
+  border-radius: 4px;
+}
+
+.ms-date {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.empty-hint {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-muted);
+  font-size: 13px;
 }
 </style>

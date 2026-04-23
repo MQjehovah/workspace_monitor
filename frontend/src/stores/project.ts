@@ -2,9 +2,9 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import {
   getProjects, getStats, getProject,
-  getProjectGoals, createGoal, updateGoal, deleteGoal,
+  createGoal, updateGoal, deleteGoal,
   upsertGoalScore, getGoalScores, deleteScore,
-  type Project, type Stats, type ProjectWithGoals, type Goal, type GoalScore,
+  type Project, type Stats, type ProjectWithGoals,
 } from '@/api'
 
 export const useProjectStore = defineStore('project', () => {

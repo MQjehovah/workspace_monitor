@@ -52,8 +52,19 @@ export interface GoalWithLatestScore {
   latest_month: number | null
 }
 
+export interface Milestone {
+  id: number
+  project_id: number
+  group_name: string | null
+  due_date: string | null
+  event: string | null
+  achieved: boolean
+  note: string | null
+}
+
 export interface ProjectWithGoals extends Project {
   goals: GoalWithLatestScore[]
+  milestones: Milestone[]
 }
 
 export const getProjects = () => api.get<Project[]>('/api/projects')
@@ -71,5 +82,12 @@ export const getGoalScores = (goalId: number) => api.get<GoalScore[]>(`/api/goal
 export const upsertGoalScore = (goalId: number, data: { year: number; month: number; score: number; comment?: string }) =>
   api.post<GoalScore>(`/api/goals/${goalId}/scores`, data)
 export const deleteScore = (scoreId: number) => api.delete(`/api/scores/${scoreId}`)
+
+export const getMilestones = (projectId: number) => api.get<Milestone[]>(`/api/projects/${projectId}/milestones`)
+export const createMilestone = (projectId: number, data: { group_name?: string; due_date?: string; event?: string }) =>
+  api.post<Milestone>(`/api/projects/${projectId}/milestones`, data)
+export const updateMilestone = (id: number, data: { group_name?: string; due_date?: string; event?: string; achieved?: boolean; note?: string }) =>
+  api.put<Milestone>(`/api/milestones/${id}`, data)
+export const deleteMilestone = (id: number) => api.delete(`/api/milestones/${id}`)
 
 export const seedData = () => api.post('/api/seed')

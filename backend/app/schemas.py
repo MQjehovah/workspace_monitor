@@ -86,6 +86,38 @@ class GoalWithLatestScore(BaseModel):
 
 class ProjectWithGoals(Project):
     goals: list[GoalWithLatestScore] = []
+    milestones: list["MilestoneOut"] = []
 
     class Config:
         from_attributes = True
+
+
+class MilestoneBase(BaseModel):
+    group_name: Optional[str] = None
+    due_date: Optional[date] = None
+    event: Optional[str] = None
+
+
+class MilestoneCreate(MilestoneBase):
+    pass
+
+
+class MilestoneUpdate(BaseModel):
+    group_name: Optional[str] = None
+    due_date: Optional[date] = None
+    event: Optional[str] = None
+    achieved: Optional[bool] = None
+    note: Optional[str] = None
+
+
+class MilestoneOut(MilestoneBase):
+    id: int
+    project_id: int
+    achieved: bool = False
+    note: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+ProjectWithGoals.model_rebuild()

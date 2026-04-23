@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey, Boolean, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.database import Base
 from datetime import datetime
@@ -19,6 +19,7 @@ class Project(Base):
     created_at = Column(Date, default=lambda: datetime.now().date())
 
     goals = relationship("Goal", back_populates="project", cascade="all, delete-orphan", order_by="Goal.id")
+    milestones = relationship("Milestone", back_populates="project", cascade="all, delete-orphan", order_by="Milestone.due_date")
 
 
 class Goal(Base):
@@ -48,3 +49,18 @@ class GoalScore(Base):
     created_at = Column(Date, default=lambda: datetime.now().date())
 
     goal = relationship("Goal", back_populates="scores")
+
+
+class Milestone(Base):
+    __tablename__ = "milestones"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    group_name = Column(String(200))
+    due_date = Column(Date, nullable=True)
+    event = Column(String(500))
+    achieved = Column(Boolean, default=False)
+    note = Column(String(500))
+    created_at = Column(Date, default=lambda: datetime.now().date())
+
+    project = relationship("Project", back_populates="milestones")
