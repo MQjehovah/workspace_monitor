@@ -70,6 +70,8 @@ export interface ProjectWithGoals extends Project {
 export const getProjects = () => api.get<Project[]>('/api/projects')
 export const getStats = () => api.get<Stats>('/api/stats')
 export const getProject = (id: number) => api.get<ProjectWithGoals>(`/api/projects/${id}`)
+export const updateProject = (id: number, data: { progress?: number }) =>
+  api.put<ProjectWithGoals>(`/api/projects/${id}`, data)
 
 export const getProjectGoals = (projectId: number) => api.get<Goal[]>(`/api/projects/${projectId}/goals`)
 export const createGoal = (projectId: number, data: { name: string; description?: string }) =>

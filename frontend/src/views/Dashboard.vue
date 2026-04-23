@@ -38,17 +38,6 @@
         </div>
         <div class="kpi-card">
           <div class="kpi-header">
-            <span>平均达成率</span>
-            <div class="kpi-icon purple">🎯</div>
-          </div>
-          <div class="kpi-value">{{ (stats?.avg_achievement || 0).toFixed(1) }}%</div>
-          <div class="progress-bar">
-            <div class="progress-fill purple" :style="{ width: (stats?.avg_achievement || 0) + '%' }"></div>
-          </div>
-          <div class="kpi-trend down">环比 -2%</div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-header">
             <span>平均考核得分</span>
             <div class="kpi-icon orange">🏆</div>
           </div>
@@ -74,7 +63,6 @@
           <tr>
             <th>项目名称</th>
             <th>进度</th>
-            <th>达成率</th>
             <th>考核得分</th>
             <th>等级</th>
             <th>健康状态</th>
@@ -91,14 +79,6 @@
                   <div class="progress-fill" :class="getProgressClass(project.progress)" :style="{ width: project.progress + '%' }"></div>
                 </div>
                 <span>{{ project.progress }}%</span>
-              </div>
-            </td>
-            <td>
-              <div class="progress-cell">
-                <div class="progress-bar">
-                  <div class="progress-fill" :class="getProgressClass(project.achievement_rate)" :style="{ width: project.achievement_rate + '%' }"></div>
-                </div>
-                <span>{{ project.achievement_rate }}%</span>
               </div>
             </td>
             <td :class="{ red: project.score < 70 }">{{ project.score }}</td>

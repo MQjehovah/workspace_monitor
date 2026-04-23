@@ -171,6 +171,18 @@ async def list_goals(project_id: int, db: Session = Depends(get_db)):
     return db.query(Goal).filter(Goal.project_id == project_id).all()
 
 
+@app.put("/api/projects/{project_id}")
+async def update_project(project_id: int, data: dict, db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if "progress" in data:
+        project.progress = float(data["progress"])
+    db.commit()
+    db.refresh(project)
+    return build_project_with_goals(project)
+
+
 @app.post("/api/projects/{project_id}/goals", response_model=GoalOut, status_code=201)
 async def create_goal(project_id: int, goal_data: GoalCreate, db: Session = Depends(get_db)):
     project = db.query(Project).filter(Project.id == project_id).first()

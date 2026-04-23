@@ -22,14 +22,23 @@
         <div class="toolbar-left">
           <h2>{{ currentProject?.name }}</h2>
           <span class="toolbar-info">综合得分：<strong>{{ currentProject?.score?.toFixed(1) }}</strong></span>
+          <div class="progress-setter">
+            <label>进度设定</label>
+            <div class="progress-input-row">
+              <input type="range" class="slider" min="0" max="100" v-model.number="progressValue" @change="saveProgress" />
+              <span class="progress-num">{{ progressValue }}%</span>
+            </div>
+          </div>
         </div>
         <div class="toolbar-right">
           <div class="admin-tabs">
             <button class="admin-tab" :class="{ active: adminTab === 'goals' }" @click="adminTab = 'goals'">目标评分</button>
             <button class="admin-tab" :class="{ active: adminTab === 'milestones' }" @click="adminTab = 'milestones'">里程碑</button>
           </div>
-          <button v-if="adminTab === 'goals'" class="btn-primary" @click="openAddGoal">+ 添加目标</button>
-          <button v-else class="btn-primary" @click="openAddMilestone">+ 添加里程碑</button>
+          <div style="margin-top: 20px;">
+              <button v-if="adminTab === 'goals'" class="btn-primary" @click="openAddGoal">+ 添加目标</button>
+              <button v-else class="btn-primary" @click="openAddMilestone">+ 添加里程碑</button>
+          </div>
         </div>
       </div>
 
@@ -231,7 +240,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useProjectStore } from '@/stores/project'
-import { getGoalScores, getMilestones, createMilestone, updateMilestone, deleteMilestone } from '@/api'
+import { getGoalScores, getMilestones, createMilestone, updateMilestone, deleteMilestone, updateProject } from '@/api'
 import type { GoalWithLatestScore, GoalScore, Milestone as MilestoneType } from '@/api'
 import dayjs from 'dayjs'
 
@@ -264,6 +273,15 @@ const showMsModal = ref(false)
 const editingMsId = ref<number | null>(null)
 const msForm = reactive({ event: '', group_name: '', due_date: '' })
 
+const progressValue = ref(0)
+
+const saveProgress = async () => {
+  if (!selectedProjectId.value) return
+  await updateProject(Number(selectedProjectId.value), { progress: progressValue.value })
+  await store.fetchProjects()
+  showToast('进度已更新')
+}
+
 const toast = ref<{ msg: string; type: string } | null>(null)
 const showToast = (msg: string, type = 'success') => {
   toast.value = { msg, type }
@@ -284,6 +302,7 @@ const loadGoals = async () => {
   const detail = await store.fetchProjectDetail(pid)
   goals.value = detail?.goals ?? []
   milestones.value = detail?.milestones ?? []
+  progressValue.value = currentProject.value?.progress ?? 0
 }
 
 const projects = computed(() => store.projects)
@@ -801,5 +820,33 @@ const handleDeleteScore = async (scoreId: number) => {
   font-size: 11px;
   color: var(--text-muted);
   margin-top: 2px;
+}
+
+.progress-setter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 16px;
+  padding-left: 16px;
+  border-left: 1px solid var(--border-subtle);
+}
+
+.progress-setter label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.progress-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.progress-num {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent-blue);
+  min-width: 36px;
 }
 </style>
