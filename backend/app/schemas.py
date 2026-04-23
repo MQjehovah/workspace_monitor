@@ -20,7 +20,7 @@ class ProjectCreate(ProjectBase):
 
 class Project(ProjectBase):
     id: int
-    
+
     class Config:
         from_attributes = True
 
@@ -31,3 +31,61 @@ class StatsResponse(BaseModel):
     avg_achievement: float
     avg_score: float
     risk_count: int
+
+
+class GoalBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+
+class GoalCreate(GoalBase):
+    pass
+
+
+class GoalUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+
+class GoalScoreBase(BaseModel):
+    year: int
+    month: int
+    score: float
+    comment: Optional[str] = None
+
+
+class GoalScoreCreate(GoalScoreBase):
+    pass
+
+
+class GoalScoreOut(GoalScoreBase):
+    id: int
+    goal_id: int
+
+    class Config:
+        from_attributes = True
+
+
+class GoalOut(GoalBase):
+    id: int
+    project_id: int
+    scores: list[GoalScoreOut] = []
+
+    class Config:
+        from_attributes = True
+
+
+class GoalWithLatestScore(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    latest_score: Optional[float] = None
+    latest_year: Optional[int] = None
+    latest_month: Optional[int] = None
+
+
+class ProjectWithGoals(Project):
+    goals: list[GoalWithLatestScore] = []
+
+    class Config:
+        from_attributes = True

@@ -3,11 +3,12 @@
     <header class="nav-header">
       <div class="nav-title">
         <h1>重大项目全景监控看板</h1>
-        <span class="version">V1.0</span>
+        <span class="version">V2.0</span>
       </div>
       <div class="nav-actions">
-        <span class="update-time">数据更新：2026-04-10 08:00</span>
+        <span class="update-time">数据更新：{{ currentTime }}</span>
         <button @click="refresh" class="btn-refresh">手动刷新</button>
+        <router-link to="/admin" class="btn-admin">后台管理</router-link>
         <button class="btn-export">导出报告</button>
       </div>
     </header>
@@ -106,23 +107,70 @@
               <span class="status-badge" :class="project.status">{{ getStatusText(project.status) }}</span>
             </td>
             <td>{{ project.owner }}</td>
-            <td><button class="btn-detail">详情</button></td>
+            <td><button class="btn-detail" @click="openDetail(project.id)">详情</button></td>
           </tr>
         </tbody>
       </table>
+    </section>
+
+    <!-- Goal Score Detail Panel -->
+    <section v-if="selectedProject" class="goal-section">
+      <div class="goal-header">
+        <h2 class="section-title">{{ selectedProject.name }} — 目标评分明细</h2>
+        <button class="btn-close" @click="selectedProject = null">关闭</button>
+      </div>
+      <div class="goal-cards">
+        <div v-for="goal in selectedProject.goals" :key="goal.id" class="goal-card">
+          <div class="goal-name">{{ goal.name }}</div>
+          <div class="goal-score-row">
+            <span class="goal-score-label">最新评分</span>
+            <span class="goal-score-value" :class="getScoreClass(goal.latest_score)">
+              {{ goal.latest_score !== null ? goal.latest_score.toFixed(1) : '未评分' }}
+            </span>
+            <span v-if="goal.latest_year && goal.latest_month" class="goal-score-date">
+              ({{ goal.latest_year }}年{{ goal.latest_month }}月)
+            </span>
+          </div>
+          <div class="goal-score-bar">
+            <div class="progress-bar">
+              <div class="progress-fill" :class="getScoreBarClass(goal.latest_score)" :style="{ width: (goal.latest_score || 0) + '%' }"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="goal-summary">
+        <span class="summary-label">项目综合得分</span>
+        <span class="summary-value">{{ selectedProject.score.toFixed(1) }}</span>
+        <span class="summary-grade">{{ getGrade(selectedProject.score) }}</span>
+        <span class="summary-hint">（所有目标最新月份评分的平均值）</span>
+      </div>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useProjectStore } from '@/stores/project'
+import type { ProjectWithGoals } from '@/api'
+import dayjs from 'dayjs'
 
 const store = useProjectStore()
+const selectedProject = ref<ProjectWithGoals | null>(null)
+
+const currentTime = computed(() => dayjs().format('YYYY-MM-DD HH:mm'))
 
 const refresh = async () => {
   await store.fetchProjects()
   await store.fetchStats()
+  if (selectedProject.value) {
+    await store.fetchProjectDetail(selectedProject.value.id)
+    selectedProject.value = store.currentProject
+  }
+}
+
+const openDetail = async (projectId: number) => {
+  const detail = await store.fetchProjectDetail(projectId)
+  selectedProject.value = detail
 }
 
 const getProgressClass = (progress: number) => {
@@ -142,6 +190,23 @@ const getStatusText = (status: string) => {
   const map: Record<string, string> = { healthy: '健康', warning: '需关注', risk: '高风险' }
   return map[status] || status
 }
+
+const getScoreClass = (score: number | null) => {
+  if (score === null) return 'muted'
+  if (score >= 80) return 'green'
+  if (score >= 60) return 'orange'
+  return 'red'
+}
+
+const getScoreBarClass = (score: number | null) => {
+  if (score === null) return 'gray'
+  if (score >= 80) return 'green'
+  if (score >= 60) return 'orange'
+  return 'red'
+}
+
+const projects = computed(() => store.projects)
+const stats = computed(() => store.stats)
 
 onMounted(() => {
   store.fetchProjects()
@@ -188,12 +253,13 @@ onMounted(() => {
   font-size: 12px;
 }
 
-.btn-refresh, .btn-export {
+.btn-refresh, .btn-export, .btn-close, .btn-admin {
   padding: 8px 16px;
   border-radius: 6px;
   border: none;
   cursor: pointer;
   font-size: 13px;
+  text-decoration: none;
 }
 
 .btn-refresh {
@@ -201,12 +267,22 @@ onMounted(() => {
   color: var(--accent-blue);
 }
 
+.btn-admin {
+  background: var(--accent-purple);
+  color: white;
+}
+
 .btn-export {
   background: var(--accent-blue);
   color: white;
 }
 
-.kpi-section, .table-section {
+.btn-close {
+  background: var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.kpi-section, .table-section, .goal-section {
   margin-top: 24px;
 }
 
@@ -268,6 +344,7 @@ onMounted(() => {
 .progress-fill.orange { background: var(--accent-orange); }
 .progress-fill.red { background: var(--accent-red); }
 .progress-fill.purple { background: var(--accent-purple); }
+.progress-fill.gray { background: var(--text-muted); }
 
 .project-table {
   width: 100%;
@@ -330,5 +407,103 @@ onMounted(() => {
   color: var(--accent-blue);
   cursor: pointer;
   font-size: 12px;
+}
+
+.goal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.goal-header .section-title {
+  margin: 0;
+}
+
+.goal-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.goal-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.goal-name {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.goal-score-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.goal-score-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.goal-score-value {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.goal-score-value.green { color: var(--accent-green); }
+.goal-score-value.orange { color: var(--accent-orange); }
+.goal-score-value.red { color: var(--accent-red); }
+.goal-score-value.muted { color: var(--text-muted); }
+
+.goal-score-date {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.goal-score-bar .progress-bar {
+  width: 100%;
+}
+
+.goal-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 16px 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--accent-blue);
+  border-radius: 12px;
+}
+
+.summary-label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.summary-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--accent-blue);
+}
+
+.summary-grade {
+  font-size: 18px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 8px;
+  background: var(--accent-blue);
+  color: white;
+}
+
+.summary-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: auto;
 }
 </style>

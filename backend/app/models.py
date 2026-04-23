@@ -1,11 +1,12 @@
-from sqlalchemy import Column, Integer, String, Float, Date
+from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey, UniqueConstraint
+from sqlalchemy.orm import relationship
 from app.database import Base
 from datetime import datetime
 
 
 class Project(Base):
     __tablename__ = "projects"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     owner = Column(String(50))
@@ -16,3 +17,34 @@ class Project(Base):
     status = Column(String(20), default="healthy")
     target_date = Column(Date, nullable=True)
     created_at = Column(Date, default=lambda: datetime.now().date())
+
+    goals = relationship("Goal", back_populates="project", cascade="all, delete-orphan", order_by="Goal.id")
+
+
+class Goal(Base):
+    __tablename__ = "goals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(200), nullable=False)
+    description = Column(String(500))
+    created_at = Column(Date, default=lambda: datetime.now().date())
+
+    project = relationship("Project", back_populates="goals")
+    scores = relationship("GoalScore", back_populates="goal", cascade="all, delete-orphan",
+                          order_by="desc(GoalScore.year), desc(GoalScore.month)")
+
+
+class GoalScore(Base):
+    __tablename__ = "goal_scores"
+    __table_args__ = (UniqueConstraint("goal_id", "year", "month", name="uq_goal_year_month"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    goal_id = Column(Integer, ForeignKey("goals.id", ondelete="CASCADE"), nullable=False)
+    year = Column(Integer, nullable=False)
+    month = Column(Integer, nullable=False)
+    score = Column(Float, nullable=False)
+    comment = Column(String(500))
+    created_at = Column(Date, default=lambda: datetime.now().date())
+
+    goal = relationship("Goal", back_populates="scores")
