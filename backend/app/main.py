@@ -5,7 +5,7 @@ import json
 from app.database import get_db, engine, Base
 from app.models import Project, Goal, GoalScore, Milestone
 from app.schemas import (
-    ProjectCreate, Project as ProjectSchema, StatsResponse,
+    ProjectCreate, ProjectUpdate, Project as ProjectSchema, StatsResponse,
     GoalCreate, GoalUpdate, GoalOut,
     GoalScoreCreate, GoalScoreOut, ProjectWithGoals, GoalWithLatestScore,
     MilestoneCreate, MilestoneUpdate, MilestoneOut,
@@ -172,15 +172,34 @@ async def list_goals(project_id: int, db: Session = Depends(get_db)):
 
 
 @app.put("/api/projects/{project_id}")
-async def update_project(project_id: int, data: dict, db: Session = Depends(get_db)):
+async def update_project(project_id: int, data: ProjectUpdate, db: Session = Depends(get_db)):
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    if "progress" in data:
-        project.progress = float(data["progress"])
+    for key, value in data.model_dump(exclude_unset=True).items():
+        setattr(project, key, value)
     db.commit()
     db.refresh(project)
     return build_project_with_goals(project)
+
+
+@app.post("/api/projects", response_model=ProjectWithGoals, status_code=201)
+async def create_project(data: ProjectCreate, db: Session = Depends(get_db)):
+    project = Project(**data.model_dump())
+    db.add(project)
+    db.commit()
+    db.refresh(project)
+    return build_project_with_goals(project)
+
+
+@app.delete("/api/projects/{project_id}")
+async def delete_project(project_id: int, db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    db.delete(project)
+    db.commit()
+    return {"status": "deleted"}
 
 
 @app.post("/api/projects/{project_id}/goals", response_model=GoalOut, status_code=201)

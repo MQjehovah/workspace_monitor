@@ -18,6 +18,13 @@ class ProjectCreate(ProjectBase):
     pass
 
 
+class ProjectUpdate(BaseModel):
+    name: Optional[str] = None
+    owner: Optional[str] = None
+    department: Optional[str] = None
+    target_date: Optional[date] = None
+
+
 class Project(ProjectBase):
     id: int
 

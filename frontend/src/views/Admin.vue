@@ -6,6 +6,9 @@
         <h1>专项目标管理</h1>
       </div>
       <div class="header-right">
+        <button class="btn-primary btn-sm-header" @click="openAddProject">+ 新增专项</button>
+        <button v-if="selectedProjectId" class="btn-sm-header btn-edit-header" @click="openEditProject">编辑专项</button>
+        <button v-if="selectedProjectId" class="btn-sm-header btn-danger-header" @click="handleDeleteProject">删除专项</button>
         <select v-model="selectedProjectId" class="project-select" @change="loadGoals">
           <option value="">选择专项</option>
           <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
@@ -116,6 +119,35 @@
         </table>
         <div v-else class="empty-state">暂无里程碑，请点击「添加里程碑」</div>
       </template>
+    </div>
+
+    <!-- Project Add/Edit Modal -->
+    <div v-if="showProjectModal" class="modal-mask" @click.self="showProjectModal = false">
+      <div class="modal-box">
+        <h3>{{ editingProjectId ? '编辑专项' : '新增专项' }}</h3>
+        <div class="form-group">
+          <label>专项名称</label>
+          <input v-model="projectForm.name" class="form-input" placeholder="请输入专项名称" />
+        </div>
+        <div class="form-row">
+          <div class="form-group half">
+            <label>负责人</label>
+            <input v-model="projectForm.owner" class="form-input" placeholder="负责人姓名" />
+          </div>
+          <div class="form-group half">
+            <label>所属部门</label>
+            <input v-model="projectForm.department" class="form-input" placeholder="部门名称" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>目标日期</label>
+          <input v-model="projectForm.target_date" type="date" class="form-input" />
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" @click="showProjectModal = false">取消</button>
+          <button class="btn-primary" @click="handleSaveProject" :disabled="!projectForm.name.trim()">保存</button>
+        </div>
+      </div>
     </div>
 
     <!-- Milestone Add/Edit Modal -->
@@ -240,7 +272,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useProjectStore } from '@/stores/project'
-import { getGoalScores, getMilestones, createMilestone, updateMilestone, deleteMilestone, updateProject } from '@/api'
+import { getGoalScores, getMilestones, createMilestone, updateMilestone, deleteMilestone, updateProject, createProject as createProjectApi, deleteProject as deleteProjectApi } from '@/api'
 import type { GoalWithLatestScore, GoalScore, Milestone as MilestoneType } from '@/api'
 import dayjs from 'dayjs'
 
@@ -275,11 +307,72 @@ const msForm = reactive({ event: '', group_name: '', due_date: '' })
 
 const progressValue = ref(0)
 
+const showProjectModal = ref(false)
+const editingProjectId = ref<number | null>(null)
+const projectForm = reactive({ name: '', owner: '', department: '', target_date: '' })
+
 const saveProgress = async () => {
   if (!selectedProjectId.value) return
   await updateProject(Number(selectedProjectId.value), { progress: progressValue.value })
   await store.fetchProjects()
   showToast('进度已更新')
+}
+
+const openAddProject = () => {
+  editingProjectId.value = null
+  projectForm.name = ''
+  projectForm.owner = ''
+  projectForm.department = ''
+  projectForm.target_date = ''
+  showProjectModal.value = true
+}
+
+const openEditProject = () => {
+  if (!currentProject.value) return
+  editingProjectId.value = currentProject.value.id
+  projectForm.name = currentProject.value.name
+  projectForm.owner = currentProject.value.owner || ''
+  projectForm.department = currentProject.value.department || ''
+  projectForm.target_date = currentProject.value.target_date || ''
+  showProjectModal.value = true
+}
+
+const handleSaveProject = async () => {
+  if (!projectForm.name.trim()) return
+  if (editingProjectId.value) {
+    await updateProject(editingProjectId.value, {
+      name: projectForm.name.trim(),
+      owner: projectForm.owner.trim() || undefined,
+      department: projectForm.department.trim() || undefined,
+      target_date: projectForm.target_date || undefined,
+    })
+    selectedProjectId.value = editingProjectId.value
+    showToast('专项已更新')
+  } else {
+    const res = await createProjectApi({
+      name: projectForm.name.trim(),
+      owner: projectForm.owner.trim() || undefined,
+      department: projectForm.department.trim() || undefined,
+      target_date: projectForm.target_date || undefined,
+    })
+    await store.fetchProjects()
+    selectedProjectId.value = res.data.id
+    showToast('专项已创建')
+  }
+  showProjectModal.value = false
+  await store.fetchProjects()
+  await loadGoals()
+}
+
+const handleDeleteProject = async () => {
+  if (!currentProject.value) return
+  if (!confirm(`确定删除专项「${currentProject.value.name}」？此操作将同时删除其下所有目标、评分和里程碑！`)) return
+  await deleteProjectApi(currentProject.value.id)
+  selectedProjectId.value = ''
+  await store.fetchProjects()
+  goals.value = []
+  milestones.value = []
+  showToast('专项已删除', 'warn')
 }
 
 const toast = ref<{ msg: string; type: string } | null>(null)
@@ -475,6 +568,39 @@ const handleDeleteScore = async (scoreId: number) => {
   color: var(--accent-blue);
   text-decoration: none;
   font-size: 13px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-sm-header {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.btn-sm-header.btn-primary {
+  background: var(--accent-blue);
+  color: white;
+}
+
+.btn-edit-header {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--accent-blue);
+  border: 1px solid var(--accent-blue) !important;
+}
+
+.btn-danger-header {
+  background: transparent;
+  color: var(--accent-red);
+  border: 1px solid var(--accent-red) !important;
 }
 
 .project-select {
