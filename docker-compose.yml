@@ -4,7 +4,7 @@ services:
   backend:
     build: ./backend
     volumes:
-      - ./data:/app/data
+      - ./bigscreen.db:/app/data/bigscreen.db
     environment:
       - DATABASE_URL=sqlite:///./data/bigscreen.db
 
