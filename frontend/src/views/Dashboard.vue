@@ -87,98 +87,27 @@
               <span class="status-badge" :class="project.status">{{ getStatusText(project.status) }}</span>
             </td>
             <td>{{ project.owner }}</td>
-            <td><button class="btn-detail" @click="openDetail(project.id)">详情</button></td>
+            <td><router-link :to="'/project/' + project.id" class="btn-detail">详情</router-link></td>
           </tr>
         </tbody>
       </table>
     </section>
 
-    <!-- Goal Score Detail Panel -->
-    <section v-if="selectedProject" class="goal-section">
-      <div class="goal-header">
-        <h2 class="section-title">{{ selectedProject.name }} — 详情</h2>
-        <button class="btn-close" @click="selectedProject = null">关闭</button>
-      </div>
-      <div class="tab-bar">
-        <button class="tab-btn" :class="{ active: detailTab === 'goals' }" @click="detailTab = 'goals'">目标评分</button>
-        <button class="tab-btn" :class="{ active: detailTab === 'milestones' }" @click="detailTab = 'milestones'">项目里程碑</button>
-      </div>
-
-      <!-- Goals Tab -->
-      <div v-if="detailTab === 'goals'" class="tab-content">
-        <div class="goal-cards">
-          <div v-for="goal in selectedProject.goals" :key="goal.id" class="goal-card">
-            <div class="goal-name">{{ goal.name }}</div>
-            <div class="goal-score-row">
-              <span class="goal-score-label">最新评分</span>
-              <span class="goal-score-value" :class="getScoreClass(goal.latest_score)">
-                {{ goal.latest_score !== null ? goal.latest_score.toFixed(1) : '未评分' }}
-              </span>
-              <span v-if="goal.latest_year && goal.latest_month" class="goal-score-date">
-                ({{ goal.latest_year }}年{{ goal.latest_month }}月)
-              </span>
-            </div>
-            <div class="goal-score-bar">
-              <div class="progress-bar">
-                <div class="progress-fill" :class="getScoreBarClass(goal.latest_score)" :style="{ width: (goal.latest_score || 0) + '%' }"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="goal-summary">
-          <span class="summary-label">项目综合得分</span>
-          <span class="summary-value">{{ selectedProject.score.toFixed(1) }}</span>
-          <span class="summary-grade">{{ getGrade(selectedProject.score) }}</span>
-          <span class="summary-hint">（当月已评分目标的平均值）</span>
-        </div>
-      </div>
-
-      <!-- Milestones Tab -->
-      <div v-if="detailTab === 'milestones'" class="tab-content">
-        <div v-if="selectedProject.milestones && selectedProject.milestones.length > 0" class="milestone-list">
-          <div v-for="ms in selectedProject.milestones" :key="ms.id" class="milestone-item">
-            <div class="ms-left">
-              <span class="ms-status" :class="{ done: ms.achieved }">{{ ms.achieved ? '✓' : '○' }}</span>
-            </div>
-            <div class="ms-body">
-              <div class="ms-event">{{ ms.event || ms.group_name }}</div>
-              <div class="ms-meta">
-                <span v-if="ms.group_name && ms.event" class="ms-group">{{ ms.group_name }}</span>
-                <span v-if="ms.due_date" class="ms-date">{{ ms.due_date }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div v-else class="empty-hint">暂无里程碑数据</div>
-      </div>
-    </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { onMounted, computed } from 'vue'
 import { useProjectStore } from '@/stores/project'
-import type { ProjectWithGoals } from '@/api'
 import dayjs from 'dayjs'
 
 const store = useProjectStore()
-const selectedProject = ref<ProjectWithGoals | null>(null)
-const detailTab = ref<'goals' | 'milestones'>('goals')
 
 const currentTime = computed(() => dayjs().format('YYYY-MM-DD HH:mm'))
 
 const refresh = async () => {
   await store.fetchProjects()
   await store.fetchStats()
-  if (selectedProject.value) {
-    await store.fetchProjectDetail(selectedProject.value.id)
-    selectedProject.value = store.currentProject
-  }
-}
-
-const openDetail = async (projectId: number) => {
-  const detail = await store.fetchProjectDetail(projectId)
-  selectedProject.value = detail
 }
 
 const getProgressClass = (progress: number) => {
@@ -197,20 +126,6 @@ const getGrade = (score: number) => {
 const getStatusText = (status: string) => {
   const map: Record<string, string> = { healthy: '健康', warning: '需关注', risk: '高风险' }
   return map[status] || status
-}
-
-const getScoreClass = (score: number | null) => {
-  if (score === null) return 'muted'
-  if (score >= 80) return 'green'
-  if (score >= 60) return 'orange'
-  return 'red'
-}
-
-const getScoreBarClass = (score: number | null) => {
-  if (score === null) return 'gray'
-  if (score >= 80) return 'green'
-  if (score >= 60) return 'orange'
-  return 'red'
 }
 
 const projects = computed(() => store.projects)
@@ -415,201 +330,6 @@ onMounted(() => {
   color: var(--accent-blue);
   cursor: pointer;
   font-size: 12px;
-}
-
-.goal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.goal-header .section-title {
-  margin: 0;
-}
-
-.goal-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
-  margin-top: 16px;
-}
-
-.goal-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  padding: 16px;
-}
-
-.goal-name {
-  font-size: 14px;
-  font-weight: 600;
-  margin-bottom: 12px;
-}
-
-.goal-score-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.goal-score-label {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.goal-score-value {
-  font-size: 24px;
-  font-weight: 700;
-}
-
-.goal-score-value.green { color: var(--accent-green); }
-.goal-score-value.orange { color: var(--accent-orange); }
-.goal-score-value.red { color: var(--accent-red); }
-.goal-score-value.muted { color: var(--text-muted); }
-
-.goal-score-date {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.goal-score-bar .progress-bar {
-  width: 100%;
-}
-
-.goal-summary {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 20px;
-  padding: 16px 20px;
-  background: var(--bg-card);
-  border: 1px solid var(--accent-blue);
-  border-radius: 12px;
-}
-
-.summary-label {
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.summary-value {
-  font-size: 32px;
-  font-weight: 700;
-  color: var(--accent-blue);
-}
-
-.summary-grade {
-  font-size: 18px;
-  font-weight: 700;
-  padding: 4px 12px;
-  border-radius: 8px;
-  background: var(--accent-blue);
-  color: white;
-}
-
-.summary-hint {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-left: auto;
-}
-
-.tab-bar {
-  display: flex;
-  gap: 0;
-  margin-top: 16px;
-  border-bottom: 2px solid var(--border-subtle);
-}
-
-.tab-btn {
-  padding: 8px 20px;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
-}
-
-.tab-btn.active {
-  color: var(--accent-blue);
-  border-bottom-color: var(--accent-blue);
-}
-
-.tab-content {
-  margin-top: 16px;
-}
-
-.milestone-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.milestone-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 12px 16px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-}
-
-.milestone-item:hover {
-  border-color: var(--accent-blue);
-}
-
-.ms-left {
-  padding-top: 2px;
-}
-
-.ms-status {
-  font-size: 16px;
-  color: var(--text-muted);
-}
-
-.ms-status.done {
-  color: var(--accent-green);
-  font-weight: 700;
-}
-
-.ms-body {
-  flex: 1;
-}
-
-.ms-event {
-  font-size: 13px;
-  line-height: 1.5;
-  white-space: pre-line;
-}
-
-.ms-meta {
-  display: flex;
-  gap: 12px;
-  margin-top: 4px;
-}
-
-.ms-group {
-  font-size: 11px;
-  color: var(--accent-purple);
-  background: rgba(139, 92, 246, 0.1);
-  padding: 1px 8px;
-  border-radius: 4px;
-}
-
-.ms-date {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.empty-hint {
-  text-align: center;
-  padding: 40px;
-  color: var(--text-muted);
-  font-size: 13px;
+  text-decoration: none;
 }
 </style>

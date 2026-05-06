@@ -1,16 +1,24 @@
-from fastapi import FastAPI, Depends, HTTPException, WebSocket
+from fastapi import FastAPI, Depends, HTTPException, WebSocket, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 import json
+import os
+import uuid
 from app.database import get_db, engine, Base
-from app.models import Project, Goal, GoalScore, Milestone
+from app.models import Project, Goal, GoalScore, Milestone, MonthlyReport
 from app.schemas import (
     ProjectCreate, ProjectUpdate, Project as ProjectSchema, StatsResponse,
     GoalCreate, GoalUpdate, GoalOut,
     GoalScoreCreate, GoalScoreOut, ProjectWithGoals, GoalWithLatestScore,
     MilestoneCreate, MilestoneUpdate, MilestoneOut,
+    MonthlyReportCreate, MonthlyReportUpdate, MonthlyReportOut,
 )
 from app.websocket import manager
+
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 app = FastAPI(title="Big Screen Monitoring API")
 
@@ -23,6 +31,15 @@ app.add_middleware(
 )
 
 Base.metadata.create_all(bind=engine)
+
+with engine.connect() as conn:
+    result = conn.execute(text("PRAGMA table_info(monthly_reports)"))
+    columns = [row[1] for row in result]
+    if "pdf_path" not in columns:
+        conn.execute(text("ALTER TABLE monthly_reports ADD COLUMN pdf_path VARCHAR(500)"))
+        conn.commit()
+
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
 def recompute_project_score(db: Session, project_id: int):
@@ -68,11 +85,13 @@ def build_goal_with_latest(goal: Goal) -> GoalWithLatestScore:
     latest_score = None
     latest_year = None
     latest_month = None
+    latest_comment = None
     if goal.scores:
         s = goal.scores[0]
         latest_score = s.score
         latest_year = s.year
         latest_month = s.month
+        latest_comment = s.comment
     return GoalWithLatestScore(
         id=goal.id,
         name=goal.name,
@@ -80,6 +99,7 @@ def build_goal_with_latest(goal: Goal) -> GoalWithLatestScore:
         latest_score=latest_score,
         latest_year=latest_year,
         latest_month=latest_month,
+        latest_comment=latest_comment,
     )
 
 
@@ -91,6 +111,13 @@ def build_project_with_goals(project: Project) -> ProjectWithGoals:
             group_name=m.group_name, due_date=m.due_date,
             event=m.event, achieved=m.achieved, note=m.note,
         ) for m in project.milestones
+    ]
+    reports_data = [
+        MonthlyReportOut(
+            id=r.id, project_id=r.project_id,
+            year=r.year, month=r.month, content=r.content,
+            pdf_path=r.pdf_path,
+        ) for r in project.reports
     ]
     return ProjectWithGoals(
         id=project.id,
@@ -104,6 +131,7 @@ def build_project_with_goals(project: Project) -> ProjectWithGoals:
         target_date=project.target_date,
         goals=goals_data,
         milestones=milestones_data,
+        reports=reports_data,
     )
 
 
@@ -303,6 +331,100 @@ async def list_goal_scores(goal_id: int, db: Session = Depends(get_db)):
     return db.query(GoalScore).filter(
         GoalScore.goal_id == goal_id
     ).order_by(GoalScore.year.desc(), GoalScore.month.desc()).all()
+
+
+@app.get("/api/projects/{project_id}/reports", response_model=list[MonthlyReportOut])
+async def list_reports(project_id: int, db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return db.query(MonthlyReport).filter(
+        MonthlyReport.project_id == project_id
+    ).order_by(MonthlyReport.year.desc(), MonthlyReport.month.desc()).all()
+
+
+@app.post("/api/projects/{project_id}/reports", response_model=MonthlyReportOut, status_code=201)
+async def create_report(project_id: int, data: MonthlyReportCreate, db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    existing = db.query(MonthlyReport).filter(
+        MonthlyReport.project_id == project_id,
+        MonthlyReport.year == data.year,
+        MonthlyReport.month == data.month,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Report for this month already exists")
+    report = MonthlyReport(project_id=project_id, **data.model_dump())
+    db.add(report)
+    db.commit()
+    db.refresh(report)
+    return report
+
+
+@app.put("/api/reports/{report_id}", response_model=MonthlyReportOut)
+async def update_report(report_id: int, data: MonthlyReportUpdate, db: Session = Depends(get_db)):
+    report = db.query(MonthlyReport).filter(MonthlyReport.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    for key, value in data.model_dump(exclude_unset=True).items():
+        setattr(report, key, value)
+    from datetime import date as date_type
+    report.updated_at = date_type.today()
+    db.commit()
+    db.refresh(report)
+    return report
+
+
+@app.post("/api/reports/{report_id}/pdf", response_model=MonthlyReportOut)
+async def upload_report_pdf(report_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    report = db.query(MonthlyReport).filter(MonthlyReport.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+    ext = os.path.splitext(file.filename)[1]
+    filename = f"report_{report_id}_{uuid.uuid4().hex[:8]}{ext}"
+    filepath = os.path.join(UPLOAD_DIR, filename)
+    content = await file.read()
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File size must be under 20MB")
+    if report.pdf_path:
+        old_file = os.path.join(UPLOAD_DIR, os.path.basename(report.pdf_path))
+        if os.path.exists(old_file):
+            os.remove(old_file)
+    with open(filepath, "wb") as f:
+        f.write(content)
+    report.pdf_path = f"/uploads/{filename}"
+    from datetime import date as date_type
+    report.updated_at = date_type.today()
+    db.commit()
+    db.refresh(report)
+    return report
+
+
+@app.delete("/api/reports/{report_id}/pdf")
+async def delete_report_pdf(report_id: int, db: Session = Depends(get_db)):
+    report = db.query(MonthlyReport).filter(MonthlyReport.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    if report.pdf_path:
+        old_file = os.path.join(UPLOAD_DIR, os.path.basename(report.pdf_path))
+        if os.path.exists(old_file):
+            os.remove(old_file)
+        report.pdf_path = None
+        db.commit()
+    return {"status": "deleted"}
+
+
+@app.delete("/api/reports/{report_id}")
+async def delete_report(report_id: int, db: Session = Depends(get_db)):
+    report = db.query(MonthlyReport).filter(MonthlyReport.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    db.delete(report)
+    db.commit()
+    return {"status": "deleted"}
 
 
 @app.post("/api/goals/{goal_id}/scores", response_model=GoalScoreOut)

@@ -49,6 +49,7 @@
         <div class="tab-bar">
           <button class="tab-btn" :class="{ active: activeTab === 'goals' }" @click="activeTab = 'goals'">目标评分</button>
           <button class="tab-btn" :class="{ active: activeTab === 'milestones' }" @click="activeTab = 'milestones'">项目里程碑</button>
+          <button class="tab-btn" :class="{ active: activeTab === 'reports' }" @click="activeTab = 'reports'">月度报告</button>
         </div>
 
         <template v-if="activeTab === 'goals'">
@@ -65,6 +66,7 @@
                   {{ goal.latest_year }}/{{ goal.latest_month }}
                 </span>
               </div>
+              <div v-if="goal.latest_comment" class="goal-comment-mobile">{{ goal.latest_comment }}</div>
               <div class="goal-bar">
                 <div class="progress-bar">
                   <div class="progress-fill" :class="getScoreBarClass(goal.latest_score)" :style="{ width: (goal.latest_score || 0) + '%' }"></div>
@@ -98,6 +100,26 @@
           </div>
           <div v-else class="empty-hint">暂无里程碑数据</div>
         </template>
+
+        <template v-if="activeTab === 'reports'">
+          <div v-if="project.reports && project.reports.length > 0" class="report-list">
+            <div v-for="r in project.reports" :key="r.id" class="report-item">
+              <div class="report-title-row">
+                <span class="report-title">{{ r.year }}年{{ r.month }}月月度报告</span>
+                <a v-if="r.pdf_path" :href="getPdfUrl(r.pdf_path)" target="_blank" class="pdf-link">查看 PDF</a>
+              </div>
+              <div v-if="r.pdf_path" class="pdf-viewer-mobile">
+                <object :data="getPdfUrl(r.pdf_path)" type="application/pdf" class="pdf-iframe-mobile">
+                  <embed :src="getPdfUrl(r.pdf_path)" type="application/pdf" />
+                </object>
+                <button class="btn-fullscreen-mobile" @click="openFullscreenPdf(getPdfUrl(r.pdf_path))">全屏查看</button>
+              </div>
+              <div v-if="r.content" class="report-body md-preview" v-html="renderMarkdown(r.content)"></div>
+              <div v-if="!r.content && !r.pdf_path" class="empty-hint">暂无内容</div>
+            </div>
+          </div>
+          <div v-else class="empty-hint">暂无月度报告</div>
+        </template>
       </div>
     </div>
 
@@ -121,6 +143,17 @@
         <span>预警</span>
       </router-link>
     </nav>
+
+    <!-- Fullscreen PDF Overlay -->
+    <div v-if="fullscreenPdfUrl" class="pdf-fullscreen-overlay">
+      <div class="pdf-fullscreen-header">
+        <span>PDF 预览</span>
+        <button class="pdf-fullscreen-close" @click="fullscreenPdfUrl = ''">关闭</button>
+      </div>
+      <object :data="fullscreenPdfUrl" type="application/pdf" class="pdf-fullscreen-iframe">
+        <embed :src="fullscreenPdfUrl" type="application/pdf" />
+      </object>
+    </div>
   </div>
 </template>
 
@@ -128,10 +161,20 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useProjectStore } from '@/stores/project'
+import MarkdownIt from 'markdown-it'
+
+const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
+const renderMarkdown = (content: string) => md.render(content || '（暂无内容）')
+const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const getPdfUrl = (pdfPath: string | null) => {
+  if (!pdfPath) return ''
+  if (pdfPath.startsWith('http')) return pdfPath
+  return apiUrl + pdfPath
+}
 
 const route = useRoute()
 const store = useProjectStore()
-const activeTab = ref<'goals' | 'milestones'>('goals')
+const activeTab = ref<'goals' | 'milestones' | 'reports'>('goals')
 
 const getStatusText = (status: string) => {
   const map: Record<string, string> = { healthy: '健康', warning: '需关注', risk: '高风险' }
@@ -173,6 +216,11 @@ onMounted(async () => {
 })
 
 const project = computed(() => store.currentProject)
+
+const fullscreenPdfUrl = ref('')
+const openFullscreenPdf = (url: string) => {
+  fullscreenPdfUrl.value = url
+}
 
 const sortedMilestones = computed(() => {
   if (!project.value?.milestones) return []
@@ -477,6 +525,16 @@ const sortedMilestones = computed(() => {
   color: var(--text-muted);
 }
 
+.goal-comment-mobile {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  background: var(--bg-primary);
+  border-radius: 4px;
+  line-height: 1.5;
+}
+
 .goal-bar .progress-bar {
   width: 100%;
 }
@@ -554,4 +612,126 @@ const sortedMilestones = computed(() => {
 .nav-icon {
   font-size: 22px;
 }
+
+.report-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.report-item {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.report-title {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 12px 12px 0;
+}
+
+.report-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 12px 0;
+}
+
+.report-title-row .report-title {
+  padding: 0;
+}
+
+.pdf-link {
+  font-size: 12px;
+  color: var(--accent-blue);
+  text-decoration: none;
+  padding: 3px 8px;
+  border: 1px solid var(--accent-blue);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.pdf-viewer-mobile {
+  padding: 8px 12px;
+}
+
+.pdf-iframe-mobile {
+  width: 100%;
+  height: 400px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  display: block;
+}
+
+.btn-fullscreen-mobile {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pdf-fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  flex-direction: column;
+}
+
+.pdf-fullscreen-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.pdf-fullscreen-close {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.3);
+  background: transparent;
+  color: white;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.pdf-fullscreen-iframe {
+  flex: 1;
+  width: 100%;
+  border: none;
+  display: block;
+}
+
+.report-body {
+  padding: 8px 12px 12px;
+}
+
+.md-preview { font-size: 13px; line-height: 1.8; }
+.md-preview :deep(h1) { font-size: 18px; font-weight: 700; margin: 12px 0 6px; }
+.md-preview :deep(h2) { font-size: 16px; font-weight: 700; margin: 10px 0 4px; }
+.md-preview :deep(h3) { font-size: 14px; font-weight: 600; margin: 8px 0 4px; }
+.md-preview :deep(p) { margin: 4px 0; }
+.md-preview :deep(ul), .md-preview :deep(ol) { padding-left: 20px; margin: 4px 0; }
+.md-preview :deep(li) { margin: 2px 0; }
+.md-preview :deep(table) { width: 100%; border-collapse: collapse; margin: 6px 0; }
+.md-preview :deep(th), .md-preview :deep(td) { border: 1px solid var(--border-subtle); padding: 4px 8px; font-size: 12px; }
+.md-preview :deep(th) { background: var(--bg-card); font-weight: 600; }
+.md-preview :deep(strong) { font-weight: 700; }
+.md-preview :deep(blockquote) { border-left: 3px solid var(--accent-blue); padding-left: 10px; color: var(--text-secondary); margin: 6px 0; }
+.md-preview :deep(code) { background: var(--bg-card); padding: 1px 3px; border-radius: 3px; font-size: 12px; }
+.md-preview :deep(pre) { background: var(--bg-card); padding: 10px; border-radius: 6px; overflow-x: auto; }
+.md-preview :deep(pre code) { background: none; padding: 0; }
 </style>

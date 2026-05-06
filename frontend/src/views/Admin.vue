@@ -37,10 +37,12 @@
           <div class="admin-tabs">
             <button class="admin-tab" :class="{ active: adminTab === 'goals' }" @click="adminTab = 'goals'">目标评分</button>
             <button class="admin-tab" :class="{ active: adminTab === 'milestones' }" @click="adminTab = 'milestones'">里程碑</button>
+            <button class="admin-tab" :class="{ active: adminTab === 'reports' }" @click="adminTab = 'reports'">月度报告</button>
           </div>
           <div style="margin-top: 20px;">
               <button v-if="adminTab === 'goals'" class="btn-primary" @click="openAddGoal">+ 添加目标</button>
-              <button v-else class="btn-primary" @click="openAddMilestone">+ 添加里程碑</button>
+              <button v-else-if="adminTab === 'milestones'" class="btn-primary" @click="openAddMilestone">+ 添加里程碑</button>
+              <button v-else class="btn-primary" @click="openAddReport">+ 新增月报</button>
           </div>
         </div>
       </div>
@@ -118,6 +120,34 @@
           </tbody>
         </table>
         <div v-else class="empty-state">暂无里程碑，请点击「添加里程碑」</div>
+      </template>
+
+      <!-- Reports Tab -->
+      <template v-if="adminTab === 'reports'">
+        <table class="goal-table" v-if="reports.length > 0">
+          <thead>
+            <tr>
+              <th style="width: 120px">年月</th>
+              <th>报告摘要</th>
+              <th style="width: 80px">PDF</th>
+              <th style="width: 150px">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="r in reports" :key="r.id">
+              <td class="center">{{ r.year }}年{{ r.month }}月</td>
+              <td class="muted" style="max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ r.content.substring(0, 80) || '（空）' }}</td>
+              <td class="center">{{ r.pdf_path ? '已上传' : '-' }}</td>
+              <td>
+                <div class="action-btns">
+                  <button class="btn-sm btn-edit" @click="openEditReport(r)">编辑</button>
+                  <button class="btn-sm btn-danger" @click="handleDeleteReport(r.id)">删除</button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-else class="empty-state">暂无月度报告，请点击「新增月报」</div>
       </template>
     </div>
 
@@ -229,6 +259,65 @@
       </div>
     </div>
 
+    <!-- Report Add/Edit Modal -->
+    <div v-if="showReportModal" class="modal-mask" @click.self="showReportModal = false">
+      <div class="modal-box wide tall">
+        <h3>{{ editingReportId ? '编辑月度报告' : '新增月度报告' }}</h3>
+        <div class="form-row" v-if="!editingReportId">
+          <div class="form-group half">
+            <label>年份</label>
+            <select v-model.number="reportForm.year" class="form-input">
+              <option v-for="y in [2025, 2026, 2027]" :key="y" :value="y">{{ y }}</option>
+            </select>
+          </div>
+          <div class="form-group half">
+            <label>月份</label>
+            <select v-model.number="reportForm.month" class="form-input">
+              <option v-for="m in 12" :key="m" :value="m">{{ m }}月</option>
+            </select>
+          </div>
+        </div>
+        <div v-else class="report-editing-hint">
+          {{ reportForm.year }}年{{ reportForm.month }}月
+        </div>
+
+        <!-- PDF Upload Section -->
+        <div class="form-group">
+          <label>PDF 附件</label>
+          <div v-if="reportPdfPath" class="pdf-info">
+            <span class="pdf-badge">PDF</span>
+            <span class="pdf-name">{{ reportPdfName }}</span>
+            <button class="btn-sm btn-danger" @click="handleRemovePdf" :disabled="reportUploading">删除</button>
+          </div>
+          <div class="pdf-upload-area">
+            <input type="file" ref="pdfInputRef" accept=".pdf" @change="handlePdfSelect" class="pdf-file-input" />
+            <button class="btn-primary pdf-upload-btn" @click="($refs.pdfInputRef as HTMLInputElement)?.click()" :disabled="reportUploading">
+              {{ reportUploading ? '上传中...' : '选择 PDF 文件' }}
+            </button>
+            <span v-if="reportPendingPdf" class="pdf-pending-name">{{ reportPendingPdf.name }}</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <div class="report-editor-header">
+            <label>报告内容（Markdown 格式）</label>
+            <div class="editor-toggle">
+              <button class="toggle-btn" :class="{ active: !reportPreview }" @click="reportPreview = false">编辑</button>
+              <button class="toggle-btn" :class="{ active: reportPreview }" @click="reportPreview = true">预览</button>
+            </div>
+          </div>
+          <textarea v-if="!reportPreview" v-model="reportForm.content" class="form-input form-textarea md-editor" rows="16" placeholder="请输入 Markdown 格式的月度报告内容&#10;&#10;支持标题、列表、表格、加粗等格式"></textarea>
+          <div v-else class="md-preview" v-html="renderMarkdown(reportForm.content)"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" @click="showReportModal = false" :disabled="reportSaving">取消</button>
+          <button class="btn-primary" @click="handleSaveReport" :disabled="reportSaving">
+            {{ reportSaving ? (reportUploading ? '正在上传 PDF...' : '保存中...') : '保存' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- History Modal -->
     <div v-if="historyGoal" class="modal-mask" @click.self="historyGoal = null">
       <div class="modal-box wide">
@@ -272,8 +361,8 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useProjectStore } from '@/stores/project'
-import { getGoalScores, getMilestones, createMilestone, updateMilestone, deleteMilestone, updateProject, createProject as createProjectApi, deleteProject as deleteProjectApi } from '@/api'
-import type { GoalWithLatestScore, GoalScore, Milestone as MilestoneType } from '@/api'
+import { getGoalScores, getMilestones, createMilestone, updateMilestone, deleteMilestone, updateProject, createProject as createProjectApi, deleteProject as deleteProjectApi, createReport, updateReport, deleteReport, uploadReportPdf, deleteReportPdf } from '@/api'
+import type { GoalWithLatestScore, GoalScore, Milestone as MilestoneType, MonthlyReport as MonthlyReportType } from '@/api'
 import dayjs from 'dayjs'
 
 const store = useProjectStore()
@@ -299,11 +388,22 @@ const scoreForm = reactive({
 const historyGoal = ref<GoalWithLatestScore | null>(null)
 const historyScores = ref<GoalScore[]>([])
 
-const adminTab = ref<'goals' | 'milestones'>('goals')
+const adminTab = ref<'goals' | 'milestones' | 'reports'>('goals')
 const milestones = ref<MilestoneType[]>([])
+const reports = ref<MonthlyReportType[]>([])
 const showMsModal = ref(false)
 const editingMsId = ref<number | null>(null)
 const msForm = reactive({ event: '', group_name: '', due_date: '' })
+
+const showReportModal = ref(false)
+const editingReportId = ref<number | null>(null)
+const reportForm = reactive({ year: dayjs().year(), month: dayjs().month() + 1, content: '' })
+const reportPreview = ref(false)
+const reportPdfPath = ref<string | null>(null)
+const reportUploading = ref(false)
+const reportSaving = ref(false)
+const reportPendingPdf = ref<File | null>(null)
+const pdfInputRef = ref<HTMLInputElement | null>(null)
 
 const progressValue = ref(0)
 
@@ -375,6 +475,115 @@ const handleDeleteProject = async () => {
   showToast('专项已删除', 'warn')
 }
 
+import MarkdownIt from 'markdown-it'
+const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
+
+const renderMarkdown = (content: string) => {
+  return md.render(content || '（暂无内容）')
+}
+
+const openAddReport = () => {
+  editingReportId.value = null
+  reportForm.year = dayjs().year()
+  reportForm.month = dayjs().month() + 1
+  reportForm.content = ''
+  reportPreview.value = false
+  reportPdfPath.value = null
+  reportPendingPdf.value = null
+  showReportModal.value = true
+}
+
+const openEditReport = (r: MonthlyReportType) => {
+  editingReportId.value = r.id
+  reportForm.year = r.year
+  reportForm.month = r.month
+  reportForm.content = r.content
+  reportPdfPath.value = r.pdf_path
+  reportPendingPdf.value = null
+  reportPreview.value = false
+  showReportModal.value = true
+}
+
+const reportPdfName = computed(() => {
+  if (!reportPdfPath.value) return ''
+  return decodeURIComponent(reportPdfPath.value.split('/').pop() || 'report.pdf')
+})
+
+const handlePdfSelect = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  if (editingReportId.value) {
+    doPdfUpload(file)
+  } else {
+    reportPendingPdf.value = file
+  }
+  input.value = ''
+}
+
+const doPdfUpload = async (file: File) => {
+  if (!editingReportId.value) return
+  reportUploading.value = true
+  try {
+    const res = await uploadReportPdf(editingReportId.value, file)
+    reportPdfPath.value = res.data.pdf_path
+    reportPendingPdf.value = null
+    showToast('PDF 已上传')
+  } catch (e: any) {
+    showToast(e?.response?.data?.detail || 'PDF 上传失败', 'error')
+  } finally {
+    reportUploading.value = false
+  }
+}
+
+const handleRemovePdf = async () => {
+  if (reportPendingPdf.value) {
+    reportPendingPdf.value = null
+    return
+  }
+  if (!editingReportId.value) return
+  await deleteReportPdf(editingReportId.value)
+  reportPdfPath.value = null
+  showToast('PDF 已删除', 'warn')
+}
+
+const handleSaveReport = async () => {
+  if (!selectedProjectId.value) return
+    reportSaving.value = true
+  try {
+    const pid = Number(selectedProjectId.value)
+    let reportId = editingReportId.value
+    if (reportId) {
+      await updateReport(reportId, { content: reportForm.content })
+      showToast('月报已更新')
+    } else {
+      const res = await createReport(pid, {
+        year: reportForm.year,
+        month: reportForm.month,
+        content: reportForm.content,
+      })
+      reportId = res.data.id
+      editingReportId.value = res.data.id
+      reportPdfPath.value = res.data.pdf_path
+      showToast('月报已创建')
+    }
+    if (reportPendingPdf.value && reportId) {
+      await doPdfUpload(reportPendingPdf.value)
+    }
+    showReportModal.value = false
+    await loadGoals()
+  } finally {
+    reportSaving.value = false
+  }
+}
+
+const handleDeleteReport = async (id: number) => {
+  if (!confirm('确定删除该月度报告？')) return
+  await deleteReport(id)
+  showToast('月报已删除', 'warn')
+  await loadGoals()
+}
+
 const toast = ref<{ msg: string; type: string } | null>(null)
 const showToast = (msg: string, type = 'success') => {
   toast.value = { msg, type }
@@ -395,6 +604,7 @@ const loadGoals = async () => {
   const detail = await store.fetchProjectDetail(pid)
   goals.value = detail?.goals ?? []
   milestones.value = detail?.milestones ?? []
+  reports.value = detail?.reports ?? []
   progressValue.value = currentProject.value?.progress ?? 0
 }
 
@@ -772,6 +982,147 @@ const handleDeleteScore = async (scoreId: number) => {
 
 .modal-box.wide {
   max-width: 640px;
+}
+
+.modal-box.tall {
+  max-height: 92vh;
+}
+
+.report-editing-hint {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent-blue);
+  margin-bottom: 12px;
+}
+
+.report-editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.report-editor-header label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.editor-toggle {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.toggle-btn {
+  padding: 3px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.toggle-btn.active {
+  background: var(--accent-blue);
+  color: white;
+}
+
+.md-editor {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.md-preview {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 16px;
+  max-height: 420px;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.md-preview :deep(h1) { font-size: 20px; font-weight: 700; margin: 16px 0 8px; }
+.md-preview :deep(h2) { font-size: 18px; font-weight: 700; margin: 14px 0 6px; }
+.md-preview :deep(h3) { font-size: 16px; font-weight: 600; margin: 12px 0 6px; }
+.md-preview :deep(p) { margin: 6px 0; }
+.md-preview :deep(ul), .md-preview :deep(ol) { padding-left: 24px; margin: 6px 0; }
+.md-preview :deep(li) { margin: 2px 0; }
+.md-preview :deep(table) { width: 100%; border-collapse: collapse; margin: 8px 0; }
+.md-preview :deep(th), .md-preview :deep(td) { border: 1px solid var(--border-subtle); padding: 6px 10px; font-size: 13px; }
+.md-preview :deep(th) { background: var(--bg-card); font-weight: 600; }
+.md-preview :deep(strong) { font-weight: 700; }
+.md-preview :deep(blockquote) { border-left: 3px solid var(--accent-blue); padding-left: 12px; color: var(--text-secondary); margin: 8px 0; }
+.md-preview :deep(code) { background: var(--bg-card); padding: 1px 4px; border-radius: 3px; font-size: 13px; }
+.md-preview :deep(pre) { background: var(--bg-card); padding: 12px; border-radius: 6px; overflow-x: auto; }
+.md-preview :deep(pre code) { background: none; padding: 0; }
+
+.pdf-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+}
+
+.pdf-badge {
+  background: #DC2626;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.pdf-name {
+  flex: 1;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdf-upload-area {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pdf-file-input {
+  display: none;
+}
+
+.pdf-upload-btn {
+  font-size: 12px;
+  padding: 6px 14px;
+  white-space: nowrap;
+}
+
+.pdf-upload-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pdf-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.pdf-pending-name {
+  font-size: 12px;
+  color: var(--text-secondary);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .modal-box h3 {

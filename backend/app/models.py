@@ -20,6 +20,7 @@ class Project(Base):
 
     goals = relationship("Goal", back_populates="project", cascade="all, delete-orphan", order_by="Goal.id")
     milestones = relationship("Milestone", back_populates="project", cascade="all, delete-orphan", order_by="Milestone.due_date")
+    reports = relationship("MonthlyReport", back_populates="project", cascade="all, delete-orphan", order_by="desc(MonthlyReport.year), desc(MonthlyReport.month)")
 
 
 class Goal(Base):
@@ -49,6 +50,22 @@ class GoalScore(Base):
     created_at = Column(Date, default=lambda: datetime.now().date())
 
     goal = relationship("Goal", back_populates="scores")
+
+
+class MonthlyReport(Base):
+    __tablename__ = "monthly_reports"
+    __table_args__ = (UniqueConstraint("project_id", "year", "month", name="uq_report_project_year_month"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    year = Column(Integer, nullable=False)
+    month = Column(Integer, nullable=False)
+    content = Column(String(50000), default="")
+    pdf_path = Column(String(500), nullable=True)
+    created_at = Column(Date, default=lambda: datetime.now().date())
+    updated_at = Column(Date, default=lambda: datetime.now().date(), onupdate=lambda: datetime.now().date())
+
+    project = relationship("Project", back_populates="reports")
 
 
 class Milestone(Base):

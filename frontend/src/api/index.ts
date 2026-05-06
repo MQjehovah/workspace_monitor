@@ -50,6 +50,7 @@ export interface GoalWithLatestScore {
   latest_score: number | null
   latest_year: number | null
   latest_month: number | null
+  latest_comment: string | null
 }
 
 export interface Milestone {
@@ -62,9 +63,19 @@ export interface Milestone {
   note: string | null
 }
 
+export interface MonthlyReport {
+  id: number
+  project_id: number
+  year: number
+  month: number
+  content: string
+  pdf_path: string | null
+}
+
 export interface ProjectWithGoals extends Project {
   goals: GoalWithLatestScore[]
   milestones: Milestone[]
+  reports: MonthlyReport[]
 }
 
 export const getProjects = () => api.get<Project[]>('/api/projects')
@@ -94,5 +105,21 @@ export const createMilestone = (projectId: number, data: { group_name?: string; 
 export const updateMilestone = (id: number, data: { group_name?: string; due_date?: string; event?: string; achieved?: boolean; note?: string }) =>
   api.put<Milestone>(`/api/milestones/${id}`, data)
 export const deleteMilestone = (id: number) => api.delete(`/api/milestones/${id}`)
+
+export const getReports = (projectId: number) => api.get<MonthlyReport[]>(`/api/projects/${projectId}/reports`)
+export const createReport = (projectId: number, data: { year: number; month: number; content: string }) =>
+  api.post<MonthlyReport>(`/api/projects/${projectId}/reports`, data)
+export const updateReport = (reportId: number, data: { content: string }) =>
+  api.put<MonthlyReport>(`/api/reports/${reportId}`, data)
+export const uploadReportPdf = (reportId: number, file: File) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return api.post<MonthlyReport>(`/api/reports/${reportId}/pdf`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000,
+  })
+}
+export const deleteReportPdf = (reportId: number) => api.delete(`/api/reports/${reportId}/pdf`)
+export const deleteReport = (reportId: number) => api.delete(`/api/reports/${reportId}`)
 
 export const seedData = () => api.post('/api/seed')

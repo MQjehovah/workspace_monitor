@@ -89,14 +89,7 @@ class GoalWithLatestScore(BaseModel):
     latest_score: Optional[float] = None
     latest_year: Optional[int] = None
     latest_month: Optional[int] = None
-
-
-class ProjectWithGoals(Project):
-    goals: list[GoalWithLatestScore] = []
-    milestones: list["MilestoneOut"] = []
-
-    class Config:
-        from_attributes = True
+    latest_comment: Optional[str] = None
 
 
 class MilestoneBase(BaseModel):
@@ -122,6 +115,38 @@ class MilestoneOut(MilestoneBase):
     project_id: int
     achieved: bool = False
     note: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class MonthlyReportBase(BaseModel):
+    year: int
+    month: int
+    content: str = ""
+
+
+class MonthlyReportCreate(MonthlyReportBase):
+    pass
+
+
+class MonthlyReportUpdate(BaseModel):
+    content: str = ""
+
+
+class MonthlyReportOut(MonthlyReportBase):
+    id: int
+    project_id: int
+    pdf_path: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ProjectWithGoals(Project):
+    goals: list[GoalWithLatestScore] = []
+    milestones: list[MilestoneOut] = []
+    reports: list[MonthlyReportOut] = []
 
     class Config:
         from_attributes = True
