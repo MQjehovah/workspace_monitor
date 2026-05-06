@@ -22,6 +22,8 @@ class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     owner: Optional[str] = None
     department: Optional[str] = None
+    progress: Optional[float] = None
+    achievement_rate: Optional[float] = None
     target_date: Optional[date] = None
 
 

@@ -155,11 +155,10 @@ import MarkdownIt from 'markdown-it'
 
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 const renderMarkdown = (content: string) => md.render(content || '（暂无内容）')
-const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const getPdfUrl = (pdfPath: string | null) => {
   if (!pdfPath) return ''
   if (pdfPath.startsWith('http')) return pdfPath
-  return apiUrl + pdfPath
+  return pdfPath
 }
 
 const route = useRoute()

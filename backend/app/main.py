@@ -77,7 +77,6 @@ def recompute_project_score(db: Session, project_id: int):
     else:
         project.status = "risk"
     project.achievement_rate = round(project.score, 1)
-    project.progress = round(min(100, project.score * 1.15), 1)
     db.commit()
 
 
@@ -848,7 +847,6 @@ async def seed_projects(db: Session = Depends(get_db)):
         else:
             p.status = "risk"
         p.achievement_rate = round(p.score, 1)
-        p.progress = round(min(100, p.score * 1.15), 1)
     db.commit()
 
     count = db.query(Project).count()
