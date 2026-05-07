@@ -457,7 +457,7 @@
         <div class="form-group">
           <label>评级</label>
           <div class="rating-options">
-            <button v-for="r in ['A+', 'A', 'B+', 'B', 'C', 'D']" :key="r"
+            <button v-for="r in ['达成', '未达成']" :key="r"
               class="rating-option" :class="{ selected: ratingForm.rating === r, [getRatingClass(r)]: true }"
               @click="ratingForm.rating = r">{{ r }}</button>
           </div>
@@ -570,15 +570,13 @@ const memberTargetTeam = ref<SubTeamType | null>(null)
 const memberForm = reactive({ name: '', role: '' })
 
 const ratingTargetTeam = ref<SubTeamType | null>(null)
-const ratingForm = reactive({ year: dayjs().year(), month: dayjs().month() + 1, rating: 'B+', comment: '' })
+const ratingForm = reactive({ year: dayjs().year(), month: dayjs().month() + 1, rating: '达成', comment: '' })
 
 const ratingHistoryTeam = ref<SubTeamType | null>(null)
 const ratingHistoryData = ref<SubTeamRatingType[]>([])
 
 const getRatingClass = (rating: string) => {
-  if (rating === 'A+' || rating === 'A') return 'green'
-  if (rating === 'B+' || rating === 'B') return 'blue'
-  if (rating === 'C') return 'orange'
+  if (rating === '达成') return 'green'
   return 'red'
 }
 
@@ -663,7 +661,7 @@ const openSubTeamRatingModal = (st: SubTeamType) => {
   ratingTargetTeam.value = st
   ratingForm.year = dayjs().year()
   ratingForm.month = dayjs().month() + 1
-  ratingForm.rating = 'B+'
+  ratingForm.rating = '达成'
   ratingForm.comment = ''
 }
 
@@ -1753,8 +1751,6 @@ const handleDeleteScore = async (scoreId: number) => {
 }
 
 .rating-badge.green { background: rgba(16, 185, 129, 0.2); color: var(--accent-green); }
-.rating-badge.blue { background: rgba(59, 130, 246, 0.2); color: var(--accent-blue); }
-.rating-badge.orange { background: rgba(245, 158, 11, 0.2); color: var(--accent-orange); }
 .rating-badge.red { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); }
 
 .rating-date {
@@ -1788,12 +1784,8 @@ const handleDeleteScore = async (scoreId: number) => {
 }
 
 .rating-option.selected.green { border-color: var(--accent-green); color: var(--accent-green); background: rgba(16, 185, 129, 0.1); }
-.rating-option.selected.blue { border-color: var(--accent-blue); color: var(--accent-blue); background: rgba(59, 130, 246, 0.1); }
-.rating-option.selected.orange { border-color: var(--accent-orange); color: var(--accent-orange); background: rgba(245, 158, 11, 0.1); }
 .rating-option.selected.red { border-color: var(--accent-red); color: var(--accent-red); background: rgba(239, 68, 68, 0.1); }
 
 .rating-option.green { border-color: rgba(16, 185, 129, 0.3); }
-.rating-option.blue { border-color: rgba(59, 130, 246, 0.3); }
-.rating-option.orange { border-color: rgba(245, 158, 11, 0.3); }
 .rating-option.red { border-color: rgba(239, 68, 68, 0.3); }
 </style>

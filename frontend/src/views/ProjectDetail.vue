@@ -33,8 +33,13 @@
           <span class="kpi-value">{{ project.score.toFixed(1) }}</span>
         </div>
         <div class="kpi-card">
-          <span class="kpi-label">目标个数</span>
-          <span class="kpi-value">{{ project.goals?.length || 0 }}</span>
+          <span class="kpi-label">子团队个数</span>
+          <span class="kpi-value">{{ project.sub_teams?.length || 0 }}</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">当月达成团队</span>
+          <span class="kpi-value green">{{ achievedTeamCount }}</span>
+          <span class="kpi-hint">/ {{ project.sub_teams?.length || 0 }}</span>
         </div>
       </div>
 
@@ -191,6 +196,16 @@ const activeTab = ref<'goals' | 'milestones' | 'subteams' | 'reports'>('goals')
 
 const currentTime = computed(() => dayjs().format('YYYY-MM-DD HH:mm'))
 
+const achievedTeamCount = computed(() => {
+  if (!project.value?.sub_teams) return 0
+  const now = dayjs()
+  const curYear = now.year()
+  const curMonth = now.month() + 1
+  return project.value.sub_teams.filter(st =>
+    st.ratings.some(r => r.year === curYear && r.month === curMonth && r.rating === '达成')
+  ).length
+})
+
 const getStatusText = (status: string) => {
   const map: Record<string, string> = { healthy: '健康', warning: '需关注', risk: '高风险' }
   return map[status] || status
@@ -238,9 +253,7 @@ const sortedMilestones = computed(() => {
 })
 
 const getRatingClass = (rating: string) => {
-  if (rating === 'A+' || rating === 'A') return 'green'
-  if (rating === 'B+' || rating === 'B') return 'blue'
-  if (rating === 'C') return 'orange'
+  if (rating === '达成') return 'green'
   return 'red'
 }
 </script>
@@ -316,7 +329,7 @@ const getRatingClass = (rating: string) => {
 
 .kpi-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 16px;
   margin-top: 20px;
 }
@@ -338,6 +351,16 @@ const getRatingClass = (rating: string) => {
 .kpi-value {
   font-size: 36px;
   font-weight: 700;
+}
+
+.kpi-value.green {
+  color: var(--accent-green);
+}
+
+.kpi-hint {
+  font-size: 16px;
+  color: var(--text-muted);
+  margin-left: 4px;
 }
 
 .progress-bar {
@@ -738,8 +761,6 @@ const getRatingClass = (rating: string) => {
 }
 
 .st-rating-badge.green { background: rgba(16, 185, 129, 0.2); color: var(--accent-green); }
-.st-rating-badge.blue { background: rgba(59, 130, 246, 0.2); color: var(--accent-blue); }
-.st-rating-badge.orange { background: rgba(245, 158, 11, 0.2); color: var(--accent-orange); }
 .st-rating-badge.red { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); }
 
 .st-rating-date {
