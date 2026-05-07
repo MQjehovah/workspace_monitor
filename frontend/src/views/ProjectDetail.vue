@@ -41,6 +41,7 @@
       <div class="tab-bar">
         <button class="tab-btn" :class="{ active: activeTab === 'goals' }" @click="activeTab = 'goals'">目标评分</button>
         <button class="tab-btn" :class="{ active: activeTab === 'milestones' }" @click="activeTab = 'milestones'">项目里程碑</button>
+        <button class="tab-btn" :class="{ active: activeTab === 'subteams' }" @click="activeTab = 'subteams'">子团队</button>
         <button class="tab-btn" :class="{ active: activeTab === 'reports' }" @click="activeTab = 'reports'">月度报告</button>
       </div>
 
@@ -106,6 +107,30 @@
         <div v-else class="empty-hint">暂无里程碑数据</div>
       </div>
 
+      <div v-if="activeTab === 'subteams'" class="tab-content">
+        <div v-if="project.sub_teams && project.sub_teams.length > 0" class="subteams-grid">
+          <div v-for="st in project.sub_teams" :key="st.id" class="subteam-card">
+            <div class="st-card-header">
+              <div>
+                <h3 class="st-name">{{ st.name }}</h3>
+                <span v-if="st.leader" class="st-leader">负责人：{{ st.leader }}</span>
+              </div>
+              <div v-if="st.ratings.length > 0" class="st-rating-badge-wrap">
+                <span class="st-rating-badge" :class="getRatingClass(st.ratings[0].rating)">{{ st.ratings[0].rating }}</span>
+                <span class="st-rating-date">{{ st.ratings[0].year }}/{{ st.ratings[0].month }}</span>
+              </div>
+            </div>
+            <div v-if="st.members.length > 0" class="st-members">
+              <span v-for="m in st.members" :key="m.id" class="st-member-chip">
+                {{ m.name }}<span v-if="m.role" class="st-member-role">{{ m.role }}</span>
+              </span>
+            </div>
+            <div v-else class="st-no-members">暂无成员</div>
+          </div>
+        </div>
+        <div v-else class="empty-hint">暂无子团队数据</div>
+      </div>
+
       <div v-if="activeTab === 'reports'" class="tab-content">
         <div v-if="project.reports && project.reports.length > 0" class="report-list">
           <div v-for="r in project.reports" :key="r.id" class="report-item">
@@ -162,7 +187,7 @@ const getPdfUrl = (pdfPath: string | null) => {
 
 const route = useRoute()
 const store = useProjectStore()
-const activeTab = ref<'goals' | 'milestones' | 'reports'>('goals')
+const activeTab = ref<'goals' | 'milestones' | 'subteams' | 'reports'>('goals')
 
 const currentTime = computed(() => dayjs().format('YYYY-MM-DD HH:mm'))
 
@@ -211,6 +236,13 @@ const sortedMilestones = computed(() => {
     return a.due_date.localeCompare(b.due_date)
   })
 })
+
+const getRatingClass = (rating: string) => {
+  if (rating === 'A+' || rating === 'A') return 'green'
+  if (rating === 'B+' || rating === 'B') return 'blue'
+  if (rating === 'C') return 'orange'
+  return 'red'
+}
 </script>
 
 <style scoped>
@@ -658,5 +690,88 @@ const sortedMilestones = computed(() => {
   text-align: center;
   color: var(--text-muted);
   font-size: 13px;
+}
+
+.subteams-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+
+.subteam-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.st-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.st-name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.st-leader {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.st-rating-badge-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.st-rating-badge {
+  display: inline-block;
+  padding: 2px 12px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.st-rating-badge.green { background: rgba(16, 185, 129, 0.2); color: var(--accent-green); }
+.st-rating-badge.blue { background: rgba(59, 130, 246, 0.2); color: var(--accent-blue); }
+.st-rating-badge.orange { background: rgba(245, 158, 11, 0.2); color: var(--accent-orange); }
+.st-rating-badge.red { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); }
+
+.st-rating-date {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.st-members {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.st-member-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.st-member-role {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.st-no-members {
+  color: var(--text-muted);
+  font-size: 12px;
 }
 </style>

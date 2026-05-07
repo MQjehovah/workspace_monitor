@@ -72,10 +72,36 @@ export interface MonthlyReport {
   pdf_path: string | null
 }
 
+export interface SubTeamMember {
+  id: number
+  sub_team_id: number
+  name: string
+  role: string | null
+}
+
+export interface SubTeamRating {
+  id: number
+  sub_team_id: number
+  year: number
+  month: number
+  rating: string
+  comment: string | null
+}
+
+export interface SubTeam {
+  id: number
+  project_id: number
+  name: string
+  leader: string | null
+  members: SubTeamMember[]
+  ratings: SubTeamRating[]
+}
+
 export interface ProjectWithGoals extends Project {
   goals: GoalWithLatestScore[]
   milestones: Milestone[]
   reports: MonthlyReport[]
+  sub_teams: SubTeam[]
 }
 
 export const getProjects = () => api.get<Project[]>('/api/projects')
@@ -121,5 +147,19 @@ export const uploadReportPdf = (reportId: number, file: File) => {
 }
 export const deleteReportPdf = (reportId: number) => api.delete(`/api/reports/${reportId}/pdf`)
 export const deleteReport = (reportId: number) => api.delete(`/api/reports/${reportId}`)
+
+export const getSubTeams = (projectId: number) => api.get<SubTeam[]>(`/api/projects/${projectId}/subteams`)
+export const createSubTeam = (projectId: number, data: { name: string; leader?: string; members?: { name: string; role?: string }[] }) =>
+  api.post<SubTeam>(`/api/projects/${projectId}/subteams`, data)
+export const updateSubTeam = (subteamId: number, data: { name?: string; leader?: string }) =>
+  api.put<SubTeam>(`/api/subteams/${subteamId}`, data)
+export const deleteSubTeam = (subteamId: number) => api.delete(`/api/subteams/${subteamId}`)
+export const addSubTeamMember = (subteamId: number, data: { name: string; role?: string }) =>
+  api.post<SubTeamMember>(`/api/subteams/${subteamId}/members`, data)
+export const deleteSubTeamMember = (memberId: number) => api.delete(`/api/subteam-members/${memberId}`)
+export const upsertSubTeamRating = (subteamId: number, data: { year: number; month: number; rating: string; comment?: string }) =>
+  api.post<SubTeamRating>(`/api/subteams/${subteamId}/ratings`, data)
+export const getSubTeamRatings = (subteamId: number) => api.get<SubTeamRating[]>(`/api/subteams/${subteamId}/ratings`)
+export const deleteSubTeamRating = (ratingId: number) => api.delete(`/api/subteam-ratings/${ratingId}`)
 
 export const seedData = () => api.post('/api/seed')

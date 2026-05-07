@@ -149,6 +149,67 @@ class ProjectWithGoals(Project):
     goals: list[GoalWithLatestScore] = []
     milestones: list[MilestoneOut] = []
     reports: list[MonthlyReportOut] = []
+    sub_teams: list["SubTeamOut"] = []
+
+    class Config:
+        from_attributes = True
+
+
+class SubTeamMemberBase(BaseModel):
+    name: str
+    role: Optional[str] = None
+
+
+class SubTeamMemberCreate(SubTeamMemberBase):
+    pass
+
+
+class SubTeamMemberOut(SubTeamMemberBase):
+    id: int
+    sub_team_id: int
+
+    class Config:
+        from_attributes = True
+
+
+class SubTeamRatingBase(BaseModel):
+    year: int
+    month: int
+    rating: str
+    comment: Optional[str] = None
+
+
+class SubTeamRatingCreate(SubTeamRatingBase):
+    pass
+
+
+class SubTeamRatingOut(SubTeamRatingBase):
+    id: int
+    sub_team_id: int
+
+    class Config:
+        from_attributes = True
+
+
+class SubTeamBase(BaseModel):
+    name: str
+    leader: Optional[str] = None
+
+
+class SubTeamCreate(SubTeamBase):
+    members: list[SubTeamMemberCreate] = []
+
+
+class SubTeamUpdate(BaseModel):
+    name: Optional[str] = None
+    leader: Optional[str] = None
+
+
+class SubTeamOut(SubTeamBase):
+    id: int
+    project_id: int
+    members: list[SubTeamMemberOut] = []
+    ratings: list[SubTeamRatingOut] = []
 
     class Config:
         from_attributes = True

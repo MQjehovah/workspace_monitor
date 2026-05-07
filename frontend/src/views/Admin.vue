@@ -37,11 +37,13 @@
           <div class="admin-tabs">
             <button class="admin-tab" :class="{ active: adminTab === 'goals' }" @click="adminTab = 'goals'">目标评分</button>
             <button class="admin-tab" :class="{ active: adminTab === 'milestones' }" @click="adminTab = 'milestones'">里程碑</button>
+            <button class="admin-tab" :class="{ active: adminTab === 'subteams' }" @click="adminTab = 'subteams'">子团队管理</button>
             <button class="admin-tab" :class="{ active: adminTab === 'reports' }" @click="adminTab = 'reports'">月度报告</button>
           </div>
           <div style="margin-top: 20px;">
               <button v-if="adminTab === 'goals'" class="btn-primary" @click="openAddGoal">+ 添加目标</button>
               <button v-else-if="adminTab === 'milestones'" class="btn-primary" @click="openAddMilestone">+ 添加里程碑</button>
+              <button v-else-if="adminTab === 'subteams'" class="btn-primary" @click="openAddSubTeam">+ 添加子团队</button>
               <button v-else class="btn-primary" @click="openAddReport">+ 新增月报</button>
           </div>
         </div>
@@ -148,6 +150,47 @@
           </tbody>
         </table>
         <div v-else class="empty-state">暂无月度报告，请点击「新增月报」</div>
+      </template>
+
+      <!-- SubTeams Tab -->
+      <template v-if="adminTab === 'subteams'">
+        <div v-if="subTeams.length > 0" class="subteams-container">
+          <div v-for="st in subTeams" :key="st.id" class="subteam-card">
+            <div class="subteam-header">
+              <div class="subteam-info">
+                <h3 class="subteam-name">{{ st.name }}</h3>
+                <span v-if="st.leader" class="subteam-leader">负责人：{{ st.leader }}</span>
+                <span class="subteam-member-count">{{ st.members.length }} 人</span>
+              </div>
+              <div class="subteam-actions">
+                <button class="btn-sm btn-edit" @click="openEditSubTeam(st)">编辑</button>
+                <button class="btn-sm btn-score" @click="openSubTeamRatingModal(st)">月度评级</button>
+                <button class="btn-sm btn-history" @click="openSubTeamRatingHistory(st)">评级记录</button>
+                <button class="btn-sm btn-danger" @click="handleDeleteSubTeam(st.id)">删除</button>
+              </div>
+            </div>
+            <div class="subteam-members">
+              <div class="members-header">
+                <span class="members-title">团队成员</span>
+                <button class="btn-sm btn-add-member" @click="openAddMember(st)">+ 添加成员</button>
+              </div>
+              <div v-if="st.members.length > 0" class="members-list">
+                <div v-for="m in st.members" :key="m.id" class="member-item">
+                  <span class="member-name">{{ m.name }}</span>
+                  <span v-if="m.role" class="member-role">{{ m.role }}</span>
+                  <button class="btn-sm btn-danger btn-member-del" @click="handleDeleteMember(m.id)">移除</button>
+                </div>
+              </div>
+              <div v-else class="no-members">暂无成员</div>
+              <div v-if="st.ratings.length > 0" class="subteam-latest-rating">
+                <span class="rating-label">最新评级：</span>
+                <span class="rating-badge" :class="getRatingClass(st.ratings[0].rating)">{{ st.ratings[0].rating }}</span>
+                <span class="rating-date">{{ st.ratings[0].year }}/{{ st.ratings[0].month }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div v-else class="empty-state">暂无子团队，请点击「添加子团队」</div>
       </template>
     </div>
 
@@ -351,6 +394,116 @@
       </div>
     </div>
 
+    <!-- SubTeam Add/Edit Modal -->
+    <div v-if="showSubTeamModal" class="modal-mask" @click.self="showSubTeamModal = false">
+      <div class="modal-box">
+        <h3>{{ editingSubTeamId ? '编辑子团队' : '添加子团队' }}</h3>
+        <div class="form-group">
+          <label>团队名称</label>
+          <input v-model="subTeamForm.name" class="form-input" placeholder="请输入子团队名称" />
+        </div>
+        <div class="form-group">
+          <label>负责人</label>
+          <input v-model="subTeamForm.leader" class="form-input" placeholder="负责人姓名（可选）" />
+        </div>
+        <div v-if="!editingSubTeamId" class="form-group">
+          <label>初始成员（每行一个姓名，可选填角色如：张三-开发）</label>
+          <textarea v-model="subTeamForm.membersText" class="form-input form-textarea" rows="4" placeholder="张三&#10;李四-测试&#10;王五-产品"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" @click="showSubTeamModal = false">取消</button>
+          <button class="btn-primary" @click="handleSaveSubTeam" :disabled="!subTeamForm.name.trim()">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Member Modal -->
+    <div v-if="showMemberModal" class="modal-mask" @click.self="showMemberModal = false">
+      <div class="modal-box">
+        <h3>添加成员到「{{ memberTargetTeam?.name }}」</h3>
+        <div class="form-group">
+          <label>成员姓名</label>
+          <input v-model="memberForm.name" class="form-input" placeholder="姓名" />
+        </div>
+        <div class="form-group">
+          <label>角色（可选）</label>
+          <input v-model="memberForm.role" class="form-input" placeholder="如：开发、测试、产品等" />
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" @click="showMemberModal = false">取消</button>
+          <button class="btn-primary" @click="handleSaveMember" :disabled="!memberForm.name.trim()">添加</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SubTeam Rating Modal -->
+    <div v-if="ratingTargetTeam" class="modal-mask" @click.self="ratingTargetTeam = null">
+      <div class="modal-box">
+        <h3>为「{{ ratingTargetTeam.name }}」月度评级</h3>
+        <div class="form-row">
+          <div class="form-group half">
+            <label>年份</label>
+            <select v-model.number="ratingForm.year" class="form-input">
+              <option v-for="y in [2025, 2026, 2027]" :key="y" :value="y">{{ y }}</option>
+            </select>
+          </div>
+          <div class="form-group half">
+            <label>月份</label>
+            <select v-model.number="ratingForm.month" class="form-input">
+              <option v-for="m in 12" :key="m" :value="m">{{ m }}月</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>评级</label>
+          <div class="rating-options">
+            <button v-for="r in ['A+', 'A', 'B+', 'B', 'C', 'D']" :key="r"
+              class="rating-option" :class="{ selected: ratingForm.rating === r, [getRatingClass(r)]: true }"
+              @click="ratingForm.rating = r">{{ r }}</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>备注</label>
+          <textarea v-model="ratingForm.comment" class="form-input form-textarea" rows="3" placeholder="评语或说明"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" @click="ratingTargetTeam = null">取消</button>
+          <button class="btn-primary" @click="handleSaveRating" :disabled="!ratingForm.rating">提交评级</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SubTeam Rating History Modal -->
+    <div v-if="ratingHistoryTeam" class="modal-mask" @click.self="ratingHistoryTeam = null">
+      <div class="modal-box wide">
+        <h3>「{{ ratingHistoryTeam.name }}」评级历史</h3>
+        <table v-if="ratingHistoryData.length > 0" class="history-table">
+          <thead>
+            <tr>
+              <th>年月</th>
+              <th>评级</th>
+              <th>备注</th>
+              <th style="width: 60px">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="r in ratingHistoryData" :key="r.id">
+              <td>{{ r.year }}年{{ r.month }}月</td>
+              <td><span class="rating-badge" :class="getRatingClass(r.rating)">{{ r.rating }}</span></td>
+              <td class="muted">{{ r.comment || '-' }}</td>
+              <td>
+                <button class="btn-sm btn-danger" @click="handleDeleteTeamRating(r.id)">删除</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-else class="empty-state">暂无评级记录</div>
+        <div class="modal-footer">
+          <button class="btn-secondary" @click="ratingHistoryTeam = null">关闭</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Toast -->
     <transition name="toast">
       <div v-if="toast" class="toast" :class="toast.type">{{ toast.msg }}</div>
@@ -361,8 +514,8 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useProjectStore } from '@/stores/project'
-import { getGoalScores, getMilestones, createMilestone, updateMilestone, deleteMilestone, updateProject, createProject as createProjectApi, deleteProject as deleteProjectApi, createReport, updateReport, deleteReport, uploadReportPdf, deleteReportPdf } from '@/api'
-import type { GoalWithLatestScore, GoalScore, Milestone as MilestoneType, MonthlyReport as MonthlyReportType } from '@/api'
+import { getGoalScores, getMilestones, createMilestone, updateMilestone, deleteMilestone, updateProject, createProject as createProjectApi, deleteProject as deleteProjectApi, createReport, updateReport, deleteReport, uploadReportPdf, deleteReportPdf, createSubTeam, updateSubTeam, deleteSubTeam, addSubTeamMember, deleteSubTeamMember, upsertSubTeamRating, getSubTeamRatings, deleteSubTeamRating } from '@/api'
+import type { GoalWithLatestScore, GoalScore, Milestone as MilestoneType, MonthlyReport as MonthlyReportType, SubTeam as SubTeamType, SubTeamRating as SubTeamRatingType } from '@/api'
 import dayjs from 'dayjs'
 
 const store = useProjectStore()
@@ -388,7 +541,7 @@ const scoreForm = reactive({
 const historyGoal = ref<GoalWithLatestScore | null>(null)
 const historyScores = ref<GoalScore[]>([])
 
-const adminTab = ref<'goals' | 'milestones' | 'reports'>('goals')
+const adminTab = ref<'goals' | 'milestones' | 'subteams' | 'reports'>('goals')
 const milestones = ref<MilestoneType[]>([])
 const reports = ref<MonthlyReportType[]>([])
 const showMsModal = ref(false)
@@ -406,6 +559,143 @@ const reportPendingPdf = ref<File | null>(null)
 const pdfInputRef = ref<HTMLInputElement | null>(null)
 
 const progressValue = ref(0)
+
+const subTeams = ref<SubTeamType[]>([])
+const showSubTeamModal = ref(false)
+const editingSubTeamId = ref<number | null>(null)
+const subTeamForm = reactive({ name: '', leader: '', membersText: '' })
+
+const showMemberModal = ref(false)
+const memberTargetTeam = ref<SubTeamType | null>(null)
+const memberForm = reactive({ name: '', role: '' })
+
+const ratingTargetTeam = ref<SubTeamType | null>(null)
+const ratingForm = reactive({ year: dayjs().year(), month: dayjs().month() + 1, rating: 'B+', comment: '' })
+
+const ratingHistoryTeam = ref<SubTeamType | null>(null)
+const ratingHistoryData = ref<SubTeamRatingType[]>([])
+
+const getRatingClass = (rating: string) => {
+  if (rating === 'A+' || rating === 'A') return 'green'
+  if (rating === 'B+' || rating === 'B') return 'blue'
+  if (rating === 'C') return 'orange'
+  return 'red'
+}
+
+const openAddSubTeam = () => {
+  editingSubTeamId.value = null
+  subTeamForm.name = ''
+  subTeamForm.leader = ''
+  subTeamForm.membersText = ''
+  showSubTeamModal.value = true
+}
+
+const openEditSubTeam = (st: SubTeamType) => {
+  editingSubTeamId.value = st.id
+  subTeamForm.name = st.name
+  subTeamForm.leader = st.leader || ''
+  showSubTeamModal.value = true
+}
+
+const handleSaveSubTeam = async () => {
+  if (!subTeamForm.name.trim() || !selectedProjectId.value) return
+  const pid = Number(selectedProjectId.value)
+  try {
+    if (editingSubTeamId.value) {
+      await updateSubTeam(editingSubTeamId.value, {
+        name: subTeamForm.name.trim(),
+        leader: subTeamForm.leader.trim() || undefined,
+      })
+      showToast('子团队已更新')
+    } else {
+      const members = subTeamForm.membersText.trim().split('\n').filter(l => l.trim()).map(line => {
+        const parts = line.trim().split(/[-—]/)
+        return { name: parts[0].trim(), role: parts[1]?.trim() || undefined }
+      })
+      await createSubTeam(pid, {
+        name: subTeamForm.name.trim(),
+        leader: subTeamForm.leader.trim() || undefined,
+        members,
+      })
+      showToast('子团队已创建')
+    }
+    showSubTeamModal.value = false
+    await loadGoals()
+  } catch (e: any) {
+    console.error('save subteam error', e)
+    showToast(e?.response?.data?.detail || '保存失败', 'error')
+  }
+}
+
+const handleDeleteSubTeam = async (id: number) => {
+  if (!confirm('确定删除该子团队？将同时删除其下所有成员和评级记录！')) return
+  await deleteSubTeam(id)
+  showToast('子团队已删除', 'warn')
+  await loadGoals()
+}
+
+const openAddMember = (st: SubTeamType) => {
+  memberTargetTeam.value = st
+  memberForm.name = ''
+  memberForm.role = ''
+  showMemberModal.value = true
+}
+
+const handleSaveMember = async () => {
+  if (!memberForm.name.trim() || !memberTargetTeam.value) return
+  await addSubTeamMember(memberTargetTeam.value.id, {
+    name: memberForm.name.trim(),
+    role: memberForm.role.trim() || undefined,
+  })
+  showToast('成员已添加')
+  showMemberModal.value = false
+  await loadGoals()
+}
+
+const handleDeleteMember = async (memberId: number) => {
+  if (!confirm('确定移除该成员？')) return
+  await deleteSubTeamMember(memberId)
+  showToast('成员已移除', 'warn')
+  await loadGoals()
+}
+
+const openSubTeamRatingModal = (st: SubTeamType) => {
+  ratingTargetTeam.value = st
+  ratingForm.year = dayjs().year()
+  ratingForm.month = dayjs().month() + 1
+  ratingForm.rating = 'B+'
+  ratingForm.comment = ''
+}
+
+const handleSaveRating = async () => {
+  if (!ratingTargetTeam.value || !ratingForm.rating) return
+  await upsertSubTeamRating(ratingTargetTeam.value.id, {
+    year: ratingForm.year,
+    month: ratingForm.month,
+    rating: ratingForm.rating,
+    comment: ratingForm.comment || undefined,
+  })
+  ratingTargetTeam.value = null
+  showToast('评级已提交')
+  await loadGoals()
+}
+
+const openSubTeamRatingHistory = async (st: SubTeamType) => {
+  ratingHistoryTeam.value = st
+  const res = await getSubTeamRatings(st.id)
+  ratingHistoryData.value = res.data
+}
+
+const handleDeleteTeamRating = async (ratingId: number) => {
+  if (!confirm('确定删除该评级记录？')) return
+  await deleteSubTeamRating(ratingId)
+  if (ratingHistoryTeam.value) {
+    const res = await getSubTeamRatings(ratingHistoryTeam.value.id)
+    ratingHistoryData.value = res.data
+  }
+  await loadGoals()
+  showToast('评级已删除', 'warn')
+}
 
 const showProjectModal = ref(false)
 const editingProjectId = ref<number | null>(null)
@@ -598,6 +888,7 @@ const loadGoals = async () => {
   if (!selectedProjectId.value) {
     goals.value = []
     milestones.value = []
+    subTeams.value = []
     return
   }
   const pid = Number(selectedProjectId.value)
@@ -605,6 +896,7 @@ const loadGoals = async () => {
   goals.value = detail?.goals ?? []
   milestones.value = detail?.milestones ?? []
   reports.value = detail?.reports ?? []
+  subTeams.value = detail?.sub_teams ?? []
   progressValue.value = currentProject.value?.progress ?? 0
 }
 
@@ -1326,4 +1618,182 @@ const handleDeleteScore = async (scoreId: number) => {
   color: var(--accent-blue);
   min-width: 36px;
 }
+
+.subteams-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.subteam-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.subteam-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.subteam-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.subteam-name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.subteam-leader {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.subteam-member-count {
+  font-size: 11px;
+  background: var(--accent-blue);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.subteam-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.subteam-members {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 12px;
+}
+
+.members-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.members-title {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.btn-add-member {
+  background: transparent;
+  color: var(--accent-blue);
+  border: 1px solid var(--accent-blue) !important;
+}
+
+.members-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.member-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+.member-name {
+  font-weight: 600;
+}
+
+.member-role {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.btn-member-del {
+  font-size: 11px;
+  padding: 2px 6px;
+}
+
+.no-members {
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 8px 0;
+}
+
+.subteam-latest-rating {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-subtle);
+}
+
+.rating-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.rating-badge {
+  display: inline-block;
+  padding: 2px 12px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.rating-badge.green { background: rgba(16, 185, 129, 0.2); color: var(--accent-green); }
+.rating-badge.blue { background: rgba(59, 130, 246, 0.2); color: var(--accent-blue); }
+.rating-badge.orange { background: rgba(245, 158, 11, 0.2); color: var(--accent-orange); }
+.rating-badge.red { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); }
+
+.rating-date {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.rating-options {
+  display: flex;
+  gap: 8px;
+}
+
+.rating-option {
+  padding: 8px 18px;
+  border-radius: 6px;
+  border: 2px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  transition: all 0.2s;
+}
+
+.rating-option:hover {
+  border-color: var(--accent-blue);
+}
+
+.rating-option.selected {
+  border-width: 2px;
+}
+
+.rating-option.selected.green { border-color: var(--accent-green); color: var(--accent-green); background: rgba(16, 185, 129, 0.1); }
+.rating-option.selected.blue { border-color: var(--accent-blue); color: var(--accent-blue); background: rgba(59, 130, 246, 0.1); }
+.rating-option.selected.orange { border-color: var(--accent-orange); color: var(--accent-orange); background: rgba(245, 158, 11, 0.1); }
+.rating-option.selected.red { border-color: var(--accent-red); color: var(--accent-red); background: rgba(239, 68, 68, 0.1); }
+
+.rating-option.green { border-color: rgba(16, 185, 129, 0.3); }
+.rating-option.blue { border-color: rgba(59, 130, 246, 0.3); }
+.rating-option.orange { border-color: rgba(245, 158, 11, 0.3); }
+.rating-option.red { border-color: rgba(239, 68, 68, 0.3); }
 </style>

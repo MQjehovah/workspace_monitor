@@ -21,6 +21,7 @@ class Project(Base):
     goals = relationship("Goal", back_populates="project", cascade="all, delete-orphan", order_by="Goal.id")
     milestones = relationship("Milestone", back_populates="project", cascade="all, delete-orphan", order_by="Milestone.due_date")
     reports = relationship("MonthlyReport", back_populates="project", cascade="all, delete-orphan", order_by="desc(MonthlyReport.year), desc(MonthlyReport.month)")
+    sub_teams = relationship("SubTeam", back_populates="project", cascade="all, delete-orphan", order_by="SubTeam.id")
 
 
 class Goal(Base):
@@ -66,6 +67,47 @@ class MonthlyReport(Base):
     updated_at = Column(Date, default=lambda: datetime.now().date(), onupdate=lambda: datetime.now().date())
 
     project = relationship("Project", back_populates="reports")
+
+
+class SubTeam(Base):
+    __tablename__ = "sub_teams"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(100), nullable=False)
+    leader = Column(String(50))
+    created_at = Column(Date, default=lambda: datetime.now().date())
+
+    project = relationship("Project", back_populates="sub_teams")
+    members = relationship("SubTeamMember", back_populates="sub_team", cascade="all, delete-orphan", order_by="SubTeamMember.id")
+    ratings = relationship("SubTeamRating", back_populates="sub_team", cascade="all, delete-orphan",
+                           order_by="desc(SubTeamRating.year), desc(SubTeamRating.month)")
+
+
+class SubTeamMember(Base):
+    __tablename__ = "sub_team_members"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sub_team_id = Column(Integer, ForeignKey("sub_teams.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(50), nullable=False)
+    role = Column(String(50))
+
+    sub_team = relationship("SubTeam", back_populates="members")
+
+
+class SubTeamRating(Base):
+    __tablename__ = "sub_team_ratings"
+    __table_args__ = (UniqueConstraint("sub_team_id", "year", "month", name="uq_subteam_rating_year_month"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    sub_team_id = Column(Integer, ForeignKey("sub_teams.id", ondelete="CASCADE"), nullable=False)
+    year = Column(Integer, nullable=False)
+    month = Column(Integer, nullable=False)
+    rating = Column(String(10), nullable=False)
+    comment = Column(String(500))
+    created_at = Column(Date, default=lambda: datetime.now().date())
+
+    sub_team = relationship("SubTeam", back_populates="ratings")
 
 
 class Milestone(Base):

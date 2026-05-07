@@ -7,13 +7,16 @@ import json
 import os
 import uuid
 from app.database import get_db, engine, Base
-from app.models import Project, Goal, GoalScore, Milestone, MonthlyReport
+from app.models import Project, Goal, GoalScore, Milestone, MonthlyReport, SubTeam, SubTeamMember, SubTeamRating
 from app.schemas import (
     ProjectCreate, ProjectUpdate, Project as ProjectSchema, StatsResponse,
     GoalCreate, GoalUpdate, GoalOut,
     GoalScoreCreate, GoalScoreOut, ProjectWithGoals, GoalWithLatestScore,
     MilestoneCreate, MilestoneUpdate, MilestoneOut,
     MonthlyReportCreate, MonthlyReportUpdate, MonthlyReportOut,
+    SubTeamCreate, SubTeamUpdate, SubTeamOut,
+    SubTeamMemberCreate, SubTeamMemberOut,
+    SubTeamRatingCreate, SubTeamRatingOut,
 )
 from app.websocket import manager
 
@@ -118,6 +121,20 @@ def build_project_with_goals(project: Project) -> ProjectWithGoals:
             pdf_path=r.pdf_path,
         ) for r in project.reports
     ]
+    sub_teams_data = [
+        SubTeamOut(
+            id=st.id, project_id=st.project_id,
+            name=st.name, leader=st.leader,
+            members=[
+                SubTeamMemberOut(id=m.id, sub_team_id=m.sub_team_id, name=m.name, role=m.role)
+                for m in st.members
+            ],
+            ratings=[
+                SubTeamRatingOut(id=r.id, sub_team_id=r.sub_team_id, year=r.year, month=r.month, rating=r.rating, comment=r.comment)
+                for r in st.ratings
+            ],
+        ) for st in project.sub_teams
+    ]
     return ProjectWithGoals(
         id=project.id,
         name=project.name,
@@ -131,6 +148,7 @@ def build_project_with_goals(project: Project) -> ProjectWithGoals:
         goals=goals_data,
         milestones=milestones_data,
         reports=reports_data,
+        sub_teams=sub_teams_data,
     )
 
 
@@ -453,6 +471,134 @@ async def upsert_goal_score(goal_id: int, score_data: GoalScoreCreate, db: Sessi
 
     recompute_project_score(db, goal.project_id)
     return result
+
+
+@app.get("/api/projects/{project_id}/subteams", response_model=list[SubTeamOut])
+async def list_sub_teams(project_id: int, db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    teams = db.query(SubTeam).filter(SubTeam.project_id == project_id).all()
+    result = []
+    for st in teams:
+        members = db.query(SubTeamMember).filter(SubTeamMember.sub_team_id == st.id).all()
+        ratings = db.query(SubTeamRating).filter(SubTeamRating.sub_team_id == st.id).order_by(SubTeamRating.year.desc(), SubTeamRating.month.desc()).all()
+        result.append(SubTeamOut(
+            id=st.id, project_id=st.project_id, name=st.name, leader=st.leader,
+            members=[SubTeamMemberOut(id=m.id, sub_team_id=m.sub_team_id, name=m.name, role=m.role) for m in members],
+            ratings=[SubTeamRatingOut(id=r.id, sub_team_id=r.sub_team_id, year=r.year, month=r.month, rating=r.rating, comment=r.comment) for r in ratings],
+        ))
+    return result
+
+
+@app.post("/api/projects/{project_id}/subteams", response_model=SubTeamOut, status_code=201)
+async def create_sub_team(project_id: int, data: SubTeamCreate, db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    st = SubTeam(project_id=project_id, name=data.name, leader=data.leader)
+    db.add(st)
+    db.flush()
+    members_out = []
+    for m in data.members:
+        member = SubTeamMember(sub_team_id=st.id, name=m.name, role=m.role)
+        db.add(member)
+        db.flush()
+        members_out.append(SubTeamMemberOut(id=member.id, sub_team_id=st.id, name=m.name, role=m.role))
+    db.commit()
+    return SubTeamOut(id=st.id, project_id=project_id, name=st.name, leader=st.leader, members=members_out, ratings=[])
+
+
+@app.put("/api/subteams/{subteam_id}", response_model=SubTeamOut)
+async def update_sub_team(subteam_id: int, data: SubTeamUpdate, db: Session = Depends(get_db)):
+    st = db.query(SubTeam).filter(SubTeam.id == subteam_id).first()
+    if not st:
+        raise HTTPException(status_code=404, detail="SubTeam not found")
+    for key, value in data.model_dump(exclude_unset=True).items():
+        setattr(st, key, value)
+    db.commit()
+    members = db.query(SubTeamMember).filter(SubTeamMember.sub_team_id == st.id).all()
+    ratings = db.query(SubTeamRating).filter(SubTeamRating.sub_team_id == st.id).order_by(SubTeamRating.year.desc(), SubTeamRating.month.desc()).all()
+    return SubTeamOut(
+        id=st.id, project_id=st.project_id, name=st.name, leader=st.leader,
+        members=[SubTeamMemberOut(id=m.id, sub_team_id=m.sub_team_id, name=m.name, role=m.role) for m in members],
+        ratings=[SubTeamRatingOut(id=r.id, sub_team_id=r.sub_team_id, year=r.year, month=r.month, rating=r.rating, comment=r.comment) for r in ratings],
+    )
+
+
+@app.delete("/api/subteams/{subteam_id}")
+async def delete_sub_team(subteam_id: int, db: Session = Depends(get_db)):
+    st = db.query(SubTeam).filter(SubTeam.id == subteam_id).first()
+    if not st:
+        raise HTTPException(status_code=404, detail="SubTeam not found")
+    db.delete(st)
+    db.commit()
+    return {"status": "deleted"}
+
+
+@app.post("/api/subteams/{subteam_id}/members", response_model=SubTeamMemberOut, status_code=201)
+async def add_sub_team_member(subteam_id: int, data: SubTeamMemberCreate, db: Session = Depends(get_db)):
+    st = db.query(SubTeam).filter(SubTeam.id == subteam_id).first()
+    if not st:
+        raise HTTPException(status_code=404, detail="SubTeam not found")
+    member = SubTeamMember(sub_team_id=subteam_id, name=data.name, role=data.role)
+    db.add(member)
+    db.commit()
+    db.refresh(member)
+    return member
+
+
+@app.delete("/api/subteam-members/{member_id}")
+async def delete_sub_team_member(member_id: int, db: Session = Depends(get_db)):
+    member = db.query(SubTeamMember).filter(SubTeamMember.id == member_id).first()
+    if not member:
+        raise HTTPException(status_code=404, detail="Member not found")
+    db.delete(member)
+    db.commit()
+    return {"status": "deleted"}
+
+
+@app.post("/api/subteams/{subteam_id}/ratings", response_model=SubTeamRatingOut)
+async def upsert_sub_team_rating(subteam_id: int, data: SubTeamRatingCreate, db: Session = Depends(get_db)):
+    st = db.query(SubTeam).filter(SubTeam.id == subteam_id).first()
+    if not st:
+        raise HTTPException(status_code=404, detail="SubTeam not found")
+    existing = db.query(SubTeamRating).filter(
+        SubTeamRating.sub_team_id == subteam_id,
+        SubTeamRating.year == data.year,
+        SubTeamRating.month == data.month,
+    ).first()
+    if existing:
+        existing.rating = data.rating
+        existing.comment = data.comment
+        db.commit()
+        db.refresh(existing)
+        return existing
+    rating = SubTeamRating(sub_team_id=subteam_id, **data.model_dump())
+    db.add(rating)
+    db.commit()
+    db.refresh(rating)
+    return rating
+
+
+@app.get("/api/subteams/{subteam_id}/ratings", response_model=list[SubTeamRatingOut])
+async def list_sub_team_ratings(subteam_id: int, db: Session = Depends(get_db)):
+    st = db.query(SubTeam).filter(SubTeam.id == subteam_id).first()
+    if not st:
+        raise HTTPException(status_code=404, detail="SubTeam not found")
+    return db.query(SubTeamRating).filter(
+        SubTeamRating.sub_team_id == subteam_id
+    ).order_by(SubTeamRating.year.desc(), SubTeamRating.month.desc()).all()
+
+
+@app.delete("/api/subteam-ratings/{rating_id}")
+async def delete_sub_team_rating(rating_id: int, db: Session = Depends(get_db)):
+    r = db.query(SubTeamRating).filter(SubTeamRating.id == rating_id).first()
+    if not r:
+        raise HTTPException(status_code=404, detail="Rating not found")
+    db.delete(r)
+    db.commit()
+    return {"status": "deleted"}
 
 
 PROJECTS_SEED = [
