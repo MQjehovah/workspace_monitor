@@ -170,7 +170,7 @@
       </object>
     </div>
 
-    <div v-else class="loading">加载中...</div>
+    <div v-if="!project" class="loading">加载中...</div>
   </div>
 </template>
 
