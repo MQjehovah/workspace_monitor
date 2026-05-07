@@ -24,8 +24,8 @@
           <span class="kpi-value">{{ project.score.toFixed(1) }}分</span>
         </div>
         <div class="kpi-item">
-          <span class="kpi-label">达成率</span>
-          <span class="kpi-value">{{ project.achievement_rate.toFixed(1) }}%</span>
+          <span class="kpi-label">目标个数</span>
+          <span class="kpi-value">{{ project.goals?.length || 0 }}</span>
         </div>
       </div>
 
@@ -79,7 +79,6 @@
           <div class="project-score-summary" v-if="project.goals && project.goals.length > 0">
             <span>项目综合得分</span>
             <span class="summary-score">{{ project.score.toFixed(1) }}</span>
-            <span class="summary-grade" :class="getGradeClass(project.score)">{{ getGrade(project.score) }}</span>
           </div>
         </template>
 
@@ -179,20 +178,6 @@ const activeTab = ref<'goals' | 'milestones' | 'reports'>('goals')
 const getStatusText = (status: string) => {
   const map: Record<string, string> = { healthy: '健康', warning: '需关注', risk: '高风险' }
   return map[status] || status
-}
-
-const getGrade = (score: number) => {
-  if (score >= 90) return 'A'
-  if (score >= 80) return 'B'
-  if (score >= 70) return 'C'
-  return 'D'
-}
-
-const getGradeClass = (score: number) => {
-  if (score >= 90) return 'grade-a'
-  if (score >= 80) return 'grade-b'
-  if (score >= 70) return 'grade-c'
-  return 'grade-d'
 }
 
 const getScoreClass = (score: number | null) => {
@@ -561,19 +546,6 @@ const sortedMilestones = computed(() => {
   font-weight: 700;
   color: var(--accent-blue);
 }
-
-.summary-grade {
-  padding: 2px 10px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 700;
-  color: white;
-}
-
-.grade-a { background: var(--accent-green); }
-.grade-b { background: var(--accent-blue); }
-.grade-c { background: var(--accent-orange); }
-.grade-d { background: var(--accent-red); }
 
 .loading {
   padding: 40px;

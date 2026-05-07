@@ -31,11 +31,10 @@
         <div class="kpi-card">
           <span class="kpi-label">考核得分</span>
           <span class="kpi-value">{{ project.score.toFixed(1) }}</span>
-          <span class="kpi-grade" :class="getGradeClass(project.score)">{{ getGrade(project.score) }}</span>
         </div>
         <div class="kpi-card">
-          <span class="kpi-label">达成率</span>
-          <span class="kpi-value">{{ project.achievement_rate.toFixed(1) }}%</span>
+          <span class="kpi-label">目标个数</span>
+          <span class="kpi-value">{{ project.goals?.length || 0 }}</span>
         </div>
       </div>
 
@@ -85,7 +84,6 @@
         <div class="goal-summary" v-if="project.goals && project.goals.length > 0">
           <span class="summary-label">项目综合得分</span>
           <span class="summary-value">{{ project.score.toFixed(1) }}</span>
-          <span class="summary-grade">{{ getGrade(project.score) }}</span>
           <span class="summary-hint">（当月已评分目标的平均值）</span>
         </div>
       </div>
@@ -171,20 +169,6 @@ const currentTime = computed(() => dayjs().format('YYYY-MM-DD HH:mm'))
 const getStatusText = (status: string) => {
   const map: Record<string, string> = { healthy: '健康', warning: '需关注', risk: '高风险' }
   return map[status] || status
-}
-
-const getGrade = (score: number) => {
-  if (score >= 90) return 'A'
-  if (score >= 80) return 'B'
-  if (score >= 70) return 'C'
-  return 'D'
-}
-
-const getGradeClass = (score: number) => {
-  if (score >= 90) return 'grade-a'
-  if (score >= 80) return 'grade-b'
-  if (score >= 70) return 'grade-c'
-  return 'grade-d'
 }
 
 const getProgressClass = (progress: number) => {
@@ -324,21 +308,6 @@ const sortedMilestones = computed(() => {
   font-weight: 700;
 }
 
-.kpi-grade {
-  display: inline-block;
-  margin-left: 8px;
-  padding: 2px 10px;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 700;
-  color: white;
-}
-
-.grade-a { background: var(--accent-green); }
-.grade-b { background: var(--accent-blue); }
-.grade-c { background: var(--accent-orange); }
-.grade-d { background: var(--accent-red); }
-
 .progress-bar {
   height: 6px;
   background: var(--border-subtle);
@@ -463,15 +432,6 @@ const sortedMilestones = computed(() => {
   font-size: 32px;
   font-weight: 700;
   color: var(--accent-blue);
-}
-
-.summary-grade {
-  font-size: 18px;
-  font-weight: 700;
-  padding: 4px 12px;
-  border-radius: 8px;
-  background: var(--accent-blue);
-  color: white;
 }
 
 .summary-hint {

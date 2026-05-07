@@ -23,7 +23,6 @@
             <div class="kpi-icon">📁</div>
           </div>
           <div class="kpi-value">{{ stats?.total_projects || 0 }}</div>
-          <div class="kpi-trend up">+2 较上月</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-header">
@@ -34,7 +33,6 @@
           <div class="progress-bar">
             <div class="progress-fill green" :style="{ width: (stats?.avg_progress || 0) + '%' }"></div>
           </div>
-          <div class="kpi-trend up">环比 +5%</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-header">
@@ -42,7 +40,6 @@
             <div class="kpi-icon orange">🏆</div>
           </div>
           <div class="kpi-value">{{ (stats?.avg_score || 0).toFixed(1) }}</div>
-          <div class="kpi-trend">较上月持平</div>
         </div>
         <div class="kpi-card risk">
           <div class="kpi-header">
@@ -50,7 +47,6 @@
             <div class="kpi-icon red">⚠️</div>
           </div>
           <div class="kpi-value red">{{ stats?.risk_count || 0 }}</div>
-          <div class="kpi-trend red">超过预警阈值</div>
         </div>
       </div>
     </section>
@@ -64,7 +60,6 @@
             <th>项目名称</th>
             <th>进度</th>
             <th>考核得分</th>
-            <th>等级</th>
             <th>健康状态</th>
             <th>负责人</th>
             <th>操作</th>
@@ -82,7 +77,6 @@
               </div>
             </td>
             <td :class="{ red: project.score < 70 }">{{ project.score }}</td>
-            <td>{{ getGrade(project.score) }}</td>
             <td>
               <span class="status-badge" :class="project.status">{{ getStatusText(project.status) }}</span>
             </td>
@@ -114,13 +108,6 @@ const getProgressClass = (progress: number) => {
   if (progress < 50) return 'red'
   if (progress < 75) return 'orange'
   return 'blue'
-}
-
-const getGrade = (score: number) => {
-  if (score >= 90) return 'A'
-  if (score >= 80) return 'B'
-  if (score >= 70) return 'C'
-  return 'D'
 }
 
 const getStatusText = (status: string) => {
@@ -251,16 +238,6 @@ onMounted(() => {
 }
 
 .kpi-value.red { color: var(--accent-red); }
-
-.kpi-trend {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-top: 4px;
-}
-
-.kpi-trend.up { color: var(--accent-green); }
-.kpi-trend.down { color: var(--accent-orange); }
-.kpi-trend.red { color: var(--accent-red); }
 
 .progress-fill.blue { background: var(--accent-blue); }
 .progress-fill.green { background: var(--accent-green); }
