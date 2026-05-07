@@ -6,7 +6,7 @@ from sqlalchemy import text
 import json
 import os
 import uuid
-from app.database import get_db, engine, Base
+from app.database import get_db, engine, Base, DATA_DIR
 from app.models import Project, Goal, GoalScore, Milestone, MonthlyReport, SubTeam, SubTeamMember, SubTeamRating
 from app.schemas import (
     ProjectCreate, ProjectUpdate, Project as ProjectSchema, StatsResponse,
@@ -20,7 +20,7 @@ from app.schemas import (
 )
 from app.websocket import manager
 
-UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
+UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 app = FastAPI(title="Big Screen Monitoring API")
