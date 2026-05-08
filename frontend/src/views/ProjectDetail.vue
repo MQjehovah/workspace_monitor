@@ -37,7 +37,7 @@
           <span class="kpi-value">{{ project.sub_teams?.length || 0 }}</span>
         </div>
         <div class="kpi-card">
-          <span class="kpi-label">当月达成团队</span>
+          <span class="kpi-label">最新达成团队</span>
           <span class="kpi-value green">{{ achievedTeamCount }}</span>
           <span class="kpi-hint">/ {{ project.sub_teams?.length || 0 }}</span>
         </div>
@@ -198,11 +198,13 @@ const currentTime = computed(() => dayjs().format('YYYY-MM-DD HH:mm'))
 
 const achievedTeamCount = computed(() => {
   if (!project.value?.sub_teams) return 0
-  const now = dayjs()
-  const curYear = now.year()
-  const curMonth = now.month() + 1
+  const allRatings = project.value.sub_teams.flatMap(st => st.ratings)
+  if (allRatings.length === 0) return 0
+  const sorted = [...allRatings].sort((a, b) => (b.year - a.year) || (b.month - a.month))
+  const latestYear = sorted[0].year
+  const latestMonth = sorted[0].month
   return project.value.sub_teams.filter(st =>
-    st.ratings.some(r => r.year === curYear && r.month === curMonth && r.rating === '达成')
+    st.ratings.some(r => r.year === latestYear && r.month === latestMonth && r.rating === '达成')
   ).length
 })
 

@@ -48,6 +48,13 @@
           </div>
           <div class="kpi-value red">{{ stats?.risk_count || 0 }}</div>
         </div>
+        <div class="kpi-card">
+          <div class="kpi-header">
+            <span>最新达成团队</span>
+            <div class="kpi-icon green">👥</div>
+          </div>
+          <div class="kpi-value"><span class="green">{{ stats?.achieved_teams || 0 }}</span><span class="kpi-hint"> / {{ stats?.total_teams || 0 }}</span></div>
+        </div>
       </div>
     </section>
 
@@ -205,7 +212,7 @@ onMounted(() => {
 
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 16px;
 }
 
@@ -235,6 +242,14 @@ onMounted(() => {
 .kpi-value {
   font-size: 40px;
   font-weight: 700;
+}
+
+.kpi-value .green { color: var(--accent-green); }
+
+.kpi-value .kpi-hint {
+  font-size: 20px;
+  font-weight: 400;
+  color: var(--text-secondary);
 }
 
 .kpi-value.red { color: var(--accent-red); }

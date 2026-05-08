@@ -40,6 +40,8 @@ class StatsResponse(BaseModel):
     avg_achievement: float
     avg_score: float
     risk_count: int
+    achieved_teams: int
+    total_teams: int
 
 
 class GoalBase(BaseModel):

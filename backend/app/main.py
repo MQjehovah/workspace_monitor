@@ -196,15 +196,27 @@ async def get_project(project_id: int, db: Session = Depends(get_db)):
 async def get_stats(db: Session = Depends(get_db)):
     projects = db.query(Project).all()
     if not projects:
-        return {"total_projects": 0, "avg_progress": 0, "avg_achievement": 0, "avg_score": 0, "risk_count": 0}
+        return {"total_projects": 0, "avg_progress": 0, "avg_achievement": 0, "avg_score": 0, "risk_count": 0, "achieved_teams": 0, "total_teams": 0}
 
     risk_count = sum(1 for p in projects if p.status == "risk")
+
+    all_ratings = db.query(SubTeamRating).all()
+    total_teams = db.query(SubTeam).count()
+    if all_ratings:
+        latest = max(all_ratings, key=lambda r: (r.year, r.month))
+        latest_year, latest_month = latest.year, latest.month
+        achieved_team_ids = set(r.sub_team_id for r in all_ratings if r.year == latest_year and r.month == latest_month and r.rating == "达成")
+    else:
+        achieved_team_ids = set()
+
     return {
         "total_projects": len(projects),
         "avg_progress": round(sum(p.progress for p in projects) / len(projects), 1),
         "avg_achievement": round(sum(p.achievement_rate for p in projects) / len(projects), 1),
         "avg_score": round(sum(p.score for p in projects) / len(projects), 1),
         "risk_count": risk_count,
+        "achieved_teams": len(achieved_team_ids),
+        "total_teams": total_teams,
     }
 
 

@@ -24,6 +24,8 @@ export interface Stats {
   avg_achievement: number
   avg_score: number
   risk_count: number
+  achieved_teams: number
+  total_teams: number
 }
 
 export interface Goal {
