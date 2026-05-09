@@ -9,9 +9,18 @@
     </header>
 
     <div v-if="project" class="detail-content">
-      <div class="project-header">
-        <h2>{{ project.name }}</h2>
-        <span class="status-badge" :class="project.status">{{ getStatusText(project.status) }}</span>
+      <div class="project-hero">
+        <div class="hero-left">
+          <h1>{{ project.name }}</h1>
+          <div class="hero-meta">
+            <span class="meta-item">负责人：{{ project.owner }}</span>
+            <span class="meta-item">部门：{{ project.department }}</span>
+            <span v-if="project.target_date" class="meta-item">目标日期：{{ project.target_date }}</span>
+          </div>
+        </div>
+        <div class="hero-right">
+          <span class="status-badge" :class="project.status">{{ getStatusText(project.status) }}</span>
+        </div>
       </div>
 
       <div class="kpi-grid">
@@ -24,24 +33,13 @@
           <span class="kpi-value">{{ project.score.toFixed(1) }}分</span>
         </div>
         <div class="kpi-item">
-          <span class="kpi-label">目标个数</span>
-          <span class="kpi-value">{{ project.goals?.length || 0 }}</span>
+          <span class="kpi-label">子团队个数</span>
+          <span class="kpi-value">{{ project.sub_teams?.length || 0 }}</span>
         </div>
-      </div>
-
-      <div class="info-section">
-        <h3>基本信息</h3>
-        <div class="info-row">
-          <span class="info-label">负责人</span>
-          <span class="info-value">{{ project.owner }}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">部门</span>
-          <span class="info-value">{{ project.department }}</span>
-        </div>
-        <div v-if="project.target_date" class="info-row">
-          <span class="info-label">目标日期</span>
-          <span class="info-value">{{ project.target_date }}</span>
+        <div class="kpi-item">
+          <span class="kpi-label">最新达成团队</span>
+          <span class="kpi-value green">{{ achievedTeamCount }}</span>
+          <span class="kpi-hint">/ {{ project.sub_teams?.length || 0 }}</span>
         </div>
       </div>
 
@@ -108,10 +106,14 @@
                 <a v-if="r.pdf_path" :href="getPdfUrl(r.pdf_path)" target="_blank" class="pdf-link">查看 PDF</a>
               </div>
               <div v-if="r.pdf_path" class="pdf-viewer-mobile">
-                <object :data="getPdfUrl(r.pdf_path)" type="application/pdf" class="pdf-iframe-mobile">
-                  <embed :src="getPdfUrl(r.pdf_path)" type="application/pdf" />
-                </object>
-                <button class="btn-fullscreen-mobile" @click="openFullscreenPdf(getPdfUrl(r.pdf_path))">全屏查看</button>
+                <div v-if="pdfState[r.id]?.loading" class="pdf-loading">PDF加载中...</div>
+                <div v-else-if="pdfState[r.id]?.pages?.length" class="pdf-pages-scroll">
+                  <img v-for="(page, idx) in pdfState[r.id].pages" :key="idx" :src="page" class="pdf-page-img" />
+                </div>
+                <div v-else class="pdf-fallback">
+                  <a :href="getPdfUrl(r.pdf_path)" target="_blank" class="pdf-link">下载查看PDF</a>
+                </div>
+                <button class="btn-fullscreen-mobile" @click="openFullscreenPdf(r.pdf_path)">全屏查看</button>
               </div>
               <div v-if="r.content" class="report-body md-preview" v-html="renderMarkdown(r.content)"></div>
               <div v-if="!r.content && !r.pdf_path" class="empty-hint">暂无内容</div>
@@ -144,23 +146,30 @@
     </nav>
 
     <!-- Fullscreen PDF Overlay -->
-    <div v-if="fullscreenPdfUrl" class="pdf-fullscreen-overlay">
+    <div v-if="showFullscreen" class="pdf-fullscreen-overlay">
       <div class="pdf-fullscreen-header">
         <span>PDF 预览</span>
-        <button class="pdf-fullscreen-close" @click="fullscreenPdfUrl = ''">关闭</button>
+        <button class="pdf-fullscreen-close" @click="showFullscreen = false">关闭</button>
       </div>
-      <object :data="fullscreenPdfUrl" type="application/pdf" class="pdf-fullscreen-iframe">
-        <embed :src="fullscreenPdfUrl" type="application/pdf" />
-      </object>
+      <div class="pdf-fullscreen-body">
+        <div v-if="fullscreenLoading" class="pdf-loading">加载中...</div>
+        <div v-else-if="fullscreenPages.length" class="pdf-pages-scroll">
+          <img v-for="(page, idx) in fullscreenPages" :key="idx" :src="page" class="pdf-page-img" />
+        </div>
+        <div v-else class="pdf-loading">加载失败</div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useProjectStore } from '@/stores/project'
 import MarkdownIt from 'markdown-it'
+import * as pdfjsLib from 'pdfjs-dist'
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
 
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 const renderMarkdown = (content: string) => md.render(content || '（暂无内容）')
@@ -202,10 +211,78 @@ onMounted(async () => {
 
 const project = computed(() => store.currentProject)
 
-const fullscreenPdfUrl = ref('')
-const openFullscreenPdf = (url: string) => {
-  fullscreenPdfUrl.value = url
+const achievedTeamCount = computed(() => {
+  if (!project.value?.sub_teams) return 0
+  const allRatings = project.value.sub_teams.flatMap(st => st.ratings)
+  if (allRatings.length === 0) return 0
+  const sorted = [...allRatings].sort((a, b) => (b.year - a.year) || (b.month - a.month))
+  const latestYear = sorted[0].year
+  const latestMonth = sorted[0].month
+  return project.value.sub_teams.filter(st =>
+    st.ratings.some(r => r.year === latestYear && r.month === latestMonth && r.rating === '达成')
+  ).length
+})
+
+const showFullscreen = ref(false)
+const fullscreenPages = ref<string[]>([])
+const fullscreenLoading = ref(false)
+
+interface PdfRenderState {
+  pages: string[]
+  loading: boolean
 }
+const pdfState = ref<Record<number, PdfRenderState>>({})
+
+async function renderPdfToImages(url: string, scale = 1.5): Promise<string[]> {
+  const pdf = await pdfjsLib.getDocument(url).promise
+  const images: string[] = []
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i)
+    const viewport = page.getViewport({ scale })
+    const canvas = document.createElement('canvas')
+    canvas.width = viewport.width
+    canvas.height = viewport.height
+    const ctx = canvas.getContext('2d')!
+    await page.render({ canvas, canvasContext: ctx, viewport }).promise
+    images.push(canvas.toDataURL('image/jpeg', 0.85))
+  }
+  return images
+}
+
+async function loadReportPdf(reportId: number, pdfPath: string) {
+  if (pdfState.value[reportId]?.pages.length || pdfState.value[reportId]?.loading) return
+  pdfState.value[reportId] = { pages: [], loading: true }
+  try {
+    const url = getPdfUrl(pdfPath)
+    const pages = await renderPdfToImages(url, 1.5)
+    pdfState.value[reportId] = { pages, loading: false }
+  } catch {
+    pdfState.value[reportId] = { pages: [], loading: false }
+  }
+}
+
+function openFullscreenPdf(pdfPath: string) {
+  const url = getPdfUrl(pdfPath)
+  showFullscreen.value = true
+  fullscreenLoading.value = true
+  fullscreenPages.value = []
+  renderPdfToImages(url, 2).then(pages => {
+    fullscreenPages.value = pages
+    fullscreenLoading.value = false
+  }).catch(() => {
+    fullscreenLoading.value = false
+    window.open(url, '_blank')
+    showFullscreen.value = false
+  })
+}
+
+watch(project, (p) => {
+  if (p?.reports) {
+    p.reports.forEach((r: any) => {
+      if (r.pdf_path) loadReportPdf(r.id, r.pdf_path)
+    })
+  }
+})
 
 const sortedMilestones = computed(() => {
   if (!project.value?.milestones) return []
@@ -264,22 +341,40 @@ const sortedMilestones = computed(() => {
   padding: 16px;
 }
 
-.project-header {
+.project-hero {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  padding: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
 }
 
-.project-header h2 {
-  margin: 0;
+.hero-left h1 {
+  margin: 0 0 8px;
   font-size: 18px;
+  font-weight: 700;
+}
+
+.hero-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.meta-item {
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .status-badge {
   padding: 4px 10px;
   border-radius: 10px;
   font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .status-badge.healthy { background: var(--accent-green); color: white; }
@@ -288,9 +383,9 @@ const sortedMilestones = computed(() => {
 
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 10px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .kpi-item {
@@ -314,32 +409,18 @@ const sortedMilestones = computed(() => {
 
 .kpi-value.green { color: var(--accent-green); }
 
-.info-section {
-  background: var(--bg-card);
-  padding: 16px;
-  border-radius: 12px;
-  margin-bottom: 16px;
-}
-
-.info-section h3 {
-  margin: 0 0 12px;
+.kpi-hint {
   font-size: 14px;
+  color: var(--text-muted);
+  margin-left: 2px;
 }
 
-.info-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.info-label {
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-.info-value {
-  font-size: 13px;
+.progress-bar {
+  height: 6px;
+  background: var(--border-subtle);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 4px;
 }
 
 .goals-section {
@@ -629,12 +710,27 @@ const sortedMilestones = computed(() => {
   padding: 8px 12px;
 }
 
-.pdf-iframe-mobile {
-  width: 100%;
-  height: 400px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+.pdf-loading {
+  text-align: center;
+  padding: 24px 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.pdf-pages-scroll {
+  -webkit-overflow-scrolling: touch;
+}
+
+.pdf-page-img {
   display: block;
+  width: 100%;
+  margin-bottom: 4px;
+  border-radius: 4px;
+}
+
+.pdf-fallback {
+  text-align: center;
+  padding: 16px;
 }
 
 .btn-fullscreen-mobile {
@@ -654,7 +750,7 @@ const sortedMilestones = computed(() => {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: rgba(0, 0, 0, 0.9);
+  background: rgba(0, 0, 0, 0.95);
   display: flex;
   flex-direction: column;
 }
@@ -668,6 +764,7 @@ const sortedMilestones = computed(() => {
   font-size: 14px;
   font-weight: 600;
   background: rgba(0, 0, 0, 0.5);
+  flex-shrink: 0;
 }
 
 .pdf-fullscreen-close {
@@ -680,11 +777,11 @@ const sortedMilestones = computed(() => {
   font-size: 13px;
 }
 
-.pdf-fullscreen-iframe {
+.pdf-fullscreen-body {
   flex: 1;
-  width: 100%;
-  border: none;
-  display: block;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 8px;
 }
 
 .report-body {

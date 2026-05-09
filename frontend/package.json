@@ -20,6 +20,7 @@
     "dayjs": "^1.11.20",
     "echarts": "^6.0.0",
     "markdown-it": "^14.1.1",
+    "pdfjs-dist": "^5.7.284",
     "pinia": "^3.0.4",
     "vue-echarts": "^8.0.1",
     "vue-router": "^5.0.4"
