@@ -106,13 +106,16 @@
                 <a v-if="r.pdf_path" :href="getPdfUrl(r.pdf_path)" target="_blank" class="pdf-link">查看 PDF</a>
               </div>
               <div v-if="r.pdf_path" class="pdf-viewer-mobile">
-                <div v-if="pdfState[r.id]?.loading" class="pdf-loading">PDF加载中...</div>
-                <div v-else-if="pdfState[r.id]?.pages?.length" class="pdf-pages-scroll">
-                  <img v-for="(page, idx) in pdfState[r.id].pages" :key="idx" :src="page" class="pdf-page-img" />
-                </div>
-                <div v-else class="pdf-fallback">
-                  <a :href="getPdfUrl(r.pdf_path)" target="_blank" class="pdf-link">下载查看PDF</a>
-                </div>
+                <template v-if="isAndroid">
+                  <div v-if="pdfState[r.id]?.loading" class="pdf-loading">PDF加载中...</div>
+                  <div v-else-if="pdfState[r.id]?.pages?.length" class="pdf-pages-scroll">
+                    <img v-for="(page, idx) in pdfState[r.id].pages" :key="idx" :src="page" class="pdf-page-img" />
+                  </div>
+                  <div v-else class="pdf-fallback">
+                    <a :href="getPdfUrl(r.pdf_path)" target="_blank" class="pdf-link">下载查看PDF</a>
+                  </div>
+                </template>
+                <iframe v-else :src="getPdfUrl(r.pdf_path)" class="pdf-iframe-mobile"></iframe>
                 <button class="btn-fullscreen-mobile" @click="openFullscreenPdf(r.pdf_path)">全屏查看</button>
               </div>
               <div v-if="r.content" class="report-body md-preview" v-html="renderMarkdown(r.content)"></div>
@@ -151,13 +154,16 @@
         <span>PDF 预览</span>
         <button class="pdf-fullscreen-close" @click="showFullscreen = false">关闭</button>
       </div>
-      <div class="pdf-fullscreen-body">
-        <div v-if="fullscreenLoading" class="pdf-loading">加载中...</div>
-        <div v-else-if="fullscreenPages.length" class="pdf-pages-scroll">
-          <img v-for="(page, idx) in fullscreenPages" :key="idx" :src="page" class="pdf-page-img" />
+      <template v-if="isAndroid">
+        <div class="pdf-fullscreen-body">
+          <div v-if="fullscreenLoading" class="pdf-loading">加载中...</div>
+          <div v-else-if="fullscreenPages.length" class="pdf-pages-scroll">
+            <img v-for="(page, idx) in fullscreenPages" :key="idx" :src="page" class="pdf-page-img" />
+          </div>
+          <div v-else class="pdf-loading">加载失败</div>
         </div>
-        <div v-else class="pdf-loading">加载失败</div>
-      </div>
+      </template>
+      <iframe v-else :src="fullscreenIframeSrc" class="pdf-fullscreen-iframe"></iframe>
     </div>
   </div>
 </template>
@@ -168,8 +174,11 @@ import { useRoute } from 'vue-router'
 import { useProjectStore } from '@/stores/project'
 import MarkdownIt from 'markdown-it'
 import * as pdfjsLib from 'pdfjs-dist'
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
+
+const isAndroid = /Android/i.test(navigator.userAgent)
 
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 const renderMarkdown = (content: string) => md.render(content || '（暂无内容）')
@@ -224,6 +233,7 @@ const achievedTeamCount = computed(() => {
 })
 
 const showFullscreen = ref(false)
+const fullscreenIframeSrc = ref('')
 const fullscreenPages = ref<string[]>([])
 const fullscreenLoading = ref(false)
 
@@ -264,6 +274,10 @@ async function loadReportPdf(reportId: number, pdfPath: string) {
 function openFullscreenPdf(pdfPath: string) {
   const url = getPdfUrl(pdfPath)
   showFullscreen.value = true
+  if (!isAndroid) {
+    fullscreenIframeSrc.value = url
+    return
+  }
   fullscreenLoading.value = true
   fullscreenPages.value = []
   renderPdfToImages(url, 2).then(pages => {
@@ -277,11 +291,10 @@ function openFullscreenPdf(pdfPath: string) {
 }
 
 watch(project, (p) => {
-  if (p?.reports) {
-    p.reports.forEach((r: any) => {
-      if (r.pdf_path) loadReportPdf(r.id, r.pdf_path)
-    })
-  }
+  if (!isAndroid || !p?.reports) return
+  p.reports.forEach((r: any) => {
+    if (r.pdf_path) loadReportPdf(r.id, r.pdf_path)
+  })
 })
 
 const sortedMilestones = computed(() => {
@@ -710,6 +723,14 @@ const sortedMilestones = computed(() => {
   padding: 8px 12px;
 }
 
+.pdf-iframe-mobile {
+  width: 100%;
+  height: 400px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  display: block;
+}
+
 .pdf-loading {
   text-align: center;
   padding: 24px 16px;
@@ -782,6 +803,13 @@ const sortedMilestones = computed(() => {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   padding: 8px;
+}
+
+.pdf-fullscreen-iframe {
+  flex: 1;
+  width: 100%;
+  border: none;
+  display: block;
 }
 
 .report-body {
