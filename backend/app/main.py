@@ -23,6 +23,9 @@ from app.websocket import manager
 UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+PDF_CACHE_DIR = os.path.join(DATA_DIR, "pdf_cache")
+os.makedirs(PDF_CACHE_DIR, exist_ok=True)
+
 app = FastAPI(title="Big Screen Monitoring API")
 
 app.add_middleware(
@@ -454,6 +457,54 @@ async def delete_report(report_id: int, db: Session = Depends(get_db)):
     db.delete(report)
     db.commit()
     return {"status": "deleted"}
+
+
+@app.get("/api/reports/{report_id}/pdf-info")
+async def get_pdf_info(report_id: int, db: Session = Depends(get_db)):
+    report = db.query(MonthlyReport).filter(MonthlyReport.id == report_id).first()
+    if not report or not report.pdf_path:
+        raise HTTPException(status_code=404, detail="PDF not found")
+    pdf_file = os.path.join(UPLOAD_DIR, os.path.basename(report.pdf_path))
+    if not os.path.exists(pdf_file):
+        raise HTTPException(status_code=404, detail="PDF file not found")
+    try:
+        import fitz
+    except ImportError:
+        raise HTTPException(status_code=500, detail="PyMuPDF not installed")
+    doc = fitz.open(pdf_file)
+    count = len(doc)
+    doc.close()
+    return {"page_count": count}
+
+
+@app.get("/api/reports/{report_id}/pdf-page/{page_num}")
+async def get_pdf_page(report_id: int, page_num: int, db: Session = Depends(get_db)):
+    from fastapi.responses import Response
+    report = db.query(MonthlyReport).filter(MonthlyReport.id == report_id).first()
+    if not report or not report.pdf_path:
+        raise HTTPException(status_code=404, detail="PDF not found")
+    pdf_file = os.path.join(UPLOAD_DIR, os.path.basename(report.pdf_path))
+    if not os.path.exists(pdf_file):
+        raise HTTPException(status_code=404, detail="PDF file not found")
+    cache_path = os.path.join(PDF_CACHE_DIR, f"{os.path.basename(report.pdf_path)}_{page_num}.jpg")
+    if os.path.exists(cache_path):
+        with open(cache_path, "rb") as f:
+            return Response(content=f.read(), media_type="image/jpeg")
+    try:
+        import fitz
+    except ImportError:
+        raise HTTPException(status_code=500, detail="PyMuPDF not installed")
+    doc = fitz.open(pdf_file)
+    if page_num < 0 or page_num >= len(doc):
+        doc.close()
+        raise HTTPException(status_code=404, detail="Page not found")
+    page = doc[page_num]
+    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+    img_bytes = pix.tobytes("jpeg", jpg_quality=85)
+    doc.close()
+    with open(cache_path, "wb") as f:
+        f.write(img_bytes)
+    return Response(content=img_bytes, media_type="image/jpeg")
 
 
 @app.post("/api/goals/{goal_id}/scores", response_model=GoalScoreOut)

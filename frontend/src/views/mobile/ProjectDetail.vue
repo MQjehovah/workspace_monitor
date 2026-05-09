@@ -107,16 +107,18 @@
               </div>
               <div v-if="r.pdf_path" class="pdf-viewer-mobile">
                 <template v-if="isAndroid">
-                  <div v-if="pdfState[r.id]?.loading" class="pdf-loading">PDF加载中...</div>
-                  <div v-else-if="pdfState[r.id]?.pages?.length" class="pdf-pages-scroll">
-                    <img v-for="(page, idx) in pdfState[r.id].pages" :key="idx" :src="page" class="pdf-page-img" />
+                  <div v-if="pdfLoading[r.id]" class="pdf-loading">PDF加载中...</div>
+                  <div v-else-if="pdfPageCounts[r.id]" class="pdf-pages-scroll">
+                    <img v-for="idx in pdfPageCounts[r.id]" :key="idx"
+                         :src="`${apiUrl}/api/reports/${r.id}/pdf-page/${idx - 1}`"
+                         class="pdf-page-img" loading="lazy" />
                   </div>
                   <div v-else class="pdf-fallback">
                     <a :href="getPdfUrl(r.pdf_path)" target="_blank" class="pdf-link">下载查看PDF</a>
                   </div>
                 </template>
                 <iframe v-else :src="getPdfUrl(r.pdf_path)" class="pdf-iframe-mobile"></iframe>
-                <button class="btn-fullscreen-mobile" @click="openFullscreenPdf(r.pdf_path)">全屏查看</button>
+                <button class="btn-fullscreen-mobile" @click="openFullscreenPdf(r)">全屏查看</button>
               </div>
               <div v-if="r.content" class="report-body md-preview" v-html="renderMarkdown(r.content)"></div>
               <div v-if="!r.content && !r.pdf_path" class="empty-hint">暂无内容</div>
@@ -156,11 +158,12 @@
       </div>
       <template v-if="isAndroid">
         <div class="pdf-fullscreen-body">
-          <div v-if="fullscreenLoading" class="pdf-loading">加载中...</div>
-          <div v-else-if="fullscreenPages.length" class="pdf-pages-scroll">
-            <img v-for="(page, idx) in fullscreenPages" :key="idx" :src="page" class="pdf-page-img" />
+          <div v-if="fullscreenPageCount === 0" class="pdf-loading">加载中...</div>
+          <div v-else class="pdf-pages-scroll">
+            <img v-for="idx in fullscreenPageCount" :key="idx"
+                 :src="`${apiUrl}/api/reports/${fullscreenReportId}/pdf-page/${idx - 1}`"
+                 class="pdf-page-img" />
           </div>
-          <div v-else class="pdf-loading">加载失败</div>
         </div>
       </template>
       <iframe v-else :src="fullscreenIframeSrc" class="pdf-fullscreen-iframe"></iframe>
@@ -173,10 +176,6 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useProjectStore } from '@/stores/project'
 import MarkdownIt from 'markdown-it'
-import * as pdfjsLib from 'pdfjs-dist'
-import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
 
 const isAndroid = /Android/i.test(navigator.userAgent)
 
@@ -234,66 +233,46 @@ const achievedTeamCount = computed(() => {
 
 const showFullscreen = ref(false)
 const fullscreenIframeSrc = ref('')
-const fullscreenPages = ref<string[]>([])
-const fullscreenLoading = ref(false)
+const fullscreenReportId = ref(0)
+const fullscreenPageCount = ref(0)
 
-interface PdfRenderState {
-  pages: string[]
-  loading: boolean
-}
-const pdfState = ref<Record<number, PdfRenderState>>({})
+const pdfPageCounts = ref<Record<number, number>>({})
+const pdfLoading = ref<Record<number, boolean>>({})
 
-async function renderPdfToImages(url: string, scale = 1.5): Promise<string[]> {
-  const pdf = await pdfjsLib.getDocument(url).promise
-  const images: string[] = []
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i)
-    const viewport = page.getViewport({ scale })
-    const canvas = document.createElement('canvas')
-    canvas.width = viewport.width
-    canvas.height = viewport.height
-    const ctx = canvas.getContext('2d')!
-    await page.render({ canvas, canvasContext: ctx, viewport }).promise
-    images.push(canvas.toDataURL('image/jpeg', 0.85))
-  }
-  return images
-}
-
-async function loadReportPdf(reportId: number, pdfPath: string) {
-  if (pdfState.value[reportId]?.pages.length || pdfState.value[reportId]?.loading) return
-  pdfState.value[reportId] = { pages: [], loading: true }
+async function loadPdfInfo(reportId: number) {
+  if (pdfPageCounts.value[reportId] || pdfLoading.value[reportId]) return
+  pdfLoading.value[reportId] = true
   try {
-    const url = getPdfUrl(pdfPath)
-    const pages = await renderPdfToImages(url, 1.5)
-    pdfState.value[reportId] = { pages, loading: false }
-  } catch {
-    pdfState.value[reportId] = { pages: [], loading: false }
-  }
+    const res = await fetch(`${apiUrl}/api/reports/${reportId}/pdf-info`)
+    if (res.ok) {
+      const data = await res.json()
+      pdfPageCounts.value[reportId] = data.page_count
+    }
+  } catch { /* ignore */ }
+  pdfLoading.value[reportId] = false
 }
 
-function openFullscreenPdf(pdfPath: string) {
-  const url = getPdfUrl(pdfPath)
-  showFullscreen.value = true
+function openFullscreenPdf(r: any) {
   if (!isAndroid) {
-    fullscreenIframeSrc.value = url
+    fullscreenIframeSrc.value = getPdfUrl(r.pdf_path)
+    showFullscreen.value = true
     return
   }
-  fullscreenLoading.value = true
-  fullscreenPages.value = []
-  renderPdfToImages(url, 2).then(pages => {
-    fullscreenPages.value = pages
-    fullscreenLoading.value = false
-  }).catch(() => {
-    fullscreenLoading.value = false
-    window.open(url, '_blank')
-    showFullscreen.value = false
-  })
+  fullscreenReportId.value = r.id
+  fullscreenPageCount.value = pdfPageCounts.value[r.id] || 0
+  showFullscreen.value = true
+  if (!fullscreenPageCount.value) {
+    fetch(`${apiUrl}/api/reports/${r.id}/pdf-info`)
+      .then(res => res.json())
+      .then(data => { fullscreenPageCount.value = data.page_count })
+      .catch(() => { fullscreenPageCount.value = 0 })
+  }
 }
 
 watch(project, (p) => {
   if (!isAndroid || !p?.reports) return
   p.reports.forEach((r: any) => {
-    if (r.pdf_path) loadReportPdf(r.id, r.pdf_path)
+    if (r.pdf_path) loadPdfInfo(r.id)
   })
 })
 
