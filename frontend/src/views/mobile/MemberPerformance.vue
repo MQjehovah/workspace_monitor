@@ -65,10 +65,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import axios from 'axios'
+import { api } from '@/api'
 import { useProjectStore } from '@/stores/project'
-
-const API = ''
 const store = useProjectStore()
 
 interface ScoreItem {
@@ -144,7 +142,7 @@ const getScoreBadgeStyle = (score: number) => ({
 
 const loadData = async () => {
   try {
-    const res = await axios.get(`${API}/api/member-performance`)
+    const res = await api.get('/api/member-performance')
     perfData.value = res.data
 
     // 默认选中第一个专项、第一个子团队、最新有数据的月份

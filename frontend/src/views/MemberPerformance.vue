@@ -174,9 +174,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, reactive } from 'vue'
-import axios from 'axios'
-
-const API = ''
+import { api } from '@/api'
 
 interface ScoreItem {
   year: number
@@ -276,9 +274,9 @@ const loadData = async () => {
     const params: any = {}
     if (filterProject.value) params.project_id = Number(filterProject.value)
     const [perfRes, projRes, rulesRes] = await Promise.allSettled([
-      axios.get(`${API}/api/member-performance`, { params }),
-      axios.get(`${API}/api/projects`),
-      axios.get(`${API}/api/score-rules`),
+      api.get('/api/member-performance', { params }),
+      api.get('/api/projects'),
+      api.get('/api/score-rules'),
     ])
     if (perfRes.status === 'fulfilled') {
       perfData.value = perfRes.value.data
@@ -313,7 +311,7 @@ const saveScore = async () => {
   saving.value = true
   try {
     if (editingScore.value.id) {
-      await axios.put(`${API}/api/member-scores/${editingScore.value.id}`, {
+      await api.put(`/api/member-scores/${editingScore.value.id}`, {
         score: editForm.score,
         comment: editForm.comment,
       })
@@ -336,7 +334,7 @@ const handleImport = async (event: Event) => {
   const formData = new FormData()
   formData.append('file', file)
   try {
-    const res = await axios.post(`${API}/api/member-scores/batch-import`, formData, {
+    const res = await api.post('/api/member-scores/batch-import', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
     importResult.value = res.data
