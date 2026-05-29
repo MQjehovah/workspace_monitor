@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey, Boolean, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey, Boolean, UniqueConstraint, DateTime, func
 from sqlalchemy.orm import relationship
 from app.database import Base
 from datetime import datetime
@@ -31,6 +31,9 @@ class Goal(Base):
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(200), nullable=False)
     description = Column(String(500))
+    monthly_target = Column(String(100), nullable=True, comment="月度目标值")
+    yearly_target = Column(String(100), nullable=True, comment="年度目标值")
+    unit = Column(String(50), default="", comment="单位")
     created_at = Column(Date, default=lambda: datetime.now().date())
 
     project = relationship("Project", back_populates="goals")
@@ -48,6 +51,11 @@ class GoalScore(Base):
     month = Column(Integer, nullable=False)
     score = Column(Float, nullable=False)
     comment = Column(String(500))
+    monthly_value = Column(String(100), nullable=True, comment="当月目标值")
+    actual_value = Column(String(100), nullable=True, comment="当月实际值")
+    monthly_rate = Column(Float, nullable=True, comment="当月完成率(%)")
+    yearly_value = Column(String(100), nullable=True, comment="年度累计实际值")
+    yearly_rate = Column(Float, nullable=True, comment="年度完成率(%)")
     created_at = Column(Date, default=lambda: datetime.now().date())
 
     goal = relationship("Goal", back_populates="scores")
@@ -76,6 +84,7 @@ class SubTeam(Base):
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(100), nullable=False)
     leader = Column(String(50))
+    specialty_name = Column(String(100), comment="专项名称/专业方向")
     created_at = Column(Date, default=lambda: datetime.now().date())
 
     project = relationship("Project", back_populates="sub_teams")
@@ -123,3 +132,19 @@ class Milestone(Base):
     created_at = Column(Date, default=lambda: datetime.now().date())
 
     project = relationship("Project", back_populates="milestones")
+
+
+class MemberMonthlyScore(Base):
+    __tablename__ = "member_monthly_scores"
+    __table_args__ = (UniqueConstraint("sub_team_member_id", "year", "month", name="uq_member_score"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    sub_team_member_id = Column(Integer, ForeignKey("sub_team_members.id", ondelete="CASCADE"), nullable=False)
+    year = Column(Integer, nullable=False)
+    month = Column(Integer, nullable=False)
+    score = Column(Integer, nullable=False, comment="1-5分制")
+    comment = Column(String(500), default="")
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    member = relationship("SubTeamMember")

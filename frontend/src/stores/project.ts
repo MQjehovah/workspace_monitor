@@ -41,7 +41,7 @@ export const useProjectStore = defineStore('project', () => {
     await fetchStats()
   }
 
-  const editGoal = async (goalId: number, projectId: number, data: { name?: string; description?: string }) => {
+  const editGoal = async (goalId: number, projectId: number, data: { name?: string; description?: string; unit?: string }) => {
     await updateGoal(goalId, data)
     await fetchProjectDetail(projectId)
   }
@@ -53,7 +53,10 @@ export const useProjectStore = defineStore('project', () => {
     await fetchStats()
   }
 
-  const scoreGoal = async (goalId: number, year: number, month: number, score: number, comment?: string) => {
+  const scoreGoal = async (
+    goalId: number, year: number, month: number, score: number,
+    comment?: string,
+  ) => {
     await upsertGoalScore(goalId, { year, month, score, comment })
   }
 

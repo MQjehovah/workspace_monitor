@@ -58,13 +58,22 @@
             <th>目标名称</th>
             <th style="width: 100px">最新评分</th>
             <th style="width: 100px">评分月份</th>
+            <th style="width: 90px">当月目标</th>
+            <th style="width: 90px">当月实际</th>
+            <th style="width: 80px">月完成率</th>
+            <th style="width: 90px">年度实际</th>
+            <th style="width: 80px">年完成率</th>
             <th style="width: 240px">操作</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="(goal, idx) in goals" :key="goal.id">
             <td class="center">{{ idx + 1 }}</td>
-            <td>{{ goal.name }}</td>
+            <td>
+              {{ goal.name }}
+              <span v-if="goal.unit" class="goal-unit-tag">({{ goal.unit }})</span>
+              <span v-if="goal.description" class="goal-desc-icon" @click.stop="showGoalDesc(goal)" title="查看描述">?</span>
+            </td>
             <td class="center">
               <span v-if="goal.latest_score !== null" class="score-tag" :class="scoreTagClass(goal.latest_score)">
                 {{ goal.latest_score.toFixed(1) }}
@@ -75,6 +84,11 @@
               <span v-if="goal.latest_year && goal.latest_month">{{ goal.latest_year }}/{{ goal.latest_month }}</span>
               <span v-else>-</span>
             </td>
+            <td class="center muted">{{ goal.latest_monthly_value != null ? goal.latest_monthly_value : '-' }}</td>
+            <td class="center muted">{{ goal.latest_monthly_actual != null ? goal.latest_monthly_actual : '-' }}</td>
+            <td class="center muted">{{ goal.latest_monthly_rate != null ? goal.latest_monthly_rate.toFixed(1) + '%' : '-' }}</td>
+            <td class="center muted">{{ goal.latest_yearly_value != null ? goal.latest_yearly_value : '-' }}</td>
+            <td class="center muted">{{ goal.latest_yearly_rate != null ? goal.latest_yearly_rate.toFixed(1) + '%' : '-' }}</td>
             <td>
               <div class="action-btns">
                 <button class="btn-sm btn-score" @click="openScoreModal(goal)">打分</button>
@@ -258,6 +272,10 @@
           <label>描述（可选）</label>
           <input v-model="goalForm.description" class="form-input" placeholder="可选" />
         </div>
+        <div class="form-group">
+          <label>单位（可选）</label>
+          <input v-model="goalForm.unit" class="form-input" placeholder="如：个、万元、次、%" />
+        </div>
         <div class="modal-footer">
           <button class="btn-secondary" @click="showGoalModal = false">取消</button>
           <button class="btn-primary" @click="handleSaveGoal" :disabled="!goalForm.name.trim()">保存</button>
@@ -265,9 +283,20 @@
       </div>
     </div>
 
+    <!-- Goal Description Modal -->
+    <div v-if="showDescModal" class="modal-mask" @click.self="showDescModal = false">
+      <div class="modal-box" style="max-width:460px;">
+        <h3>{{ descGoalName }}</h3>
+        <p style="line-height:1.7;color:#555;white-space:pre-wrap;">{{ descGoalContent }}</p>
+        <div class="modal-footer">
+          <button class="btn-primary" @click="showDescModal = false">关闭</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Score Modal -->
     <div v-if="scoringGoal" class="modal-mask" @click.self="scoringGoal = null">
-      <div class="modal-box">
+      <div class="modal-box score-modal-wide">
         <h3>为「{{ scoringGoal.name }}」打分</h3>
         <div class="form-row">
           <div class="form-group half">
@@ -291,6 +320,7 @@
             <span class="slider-val">{{ scoreForm.score }}</span>
           </div>
         </div>
+        <!-- 实际值/完成率字段已移除，统一在目标看板中维护 -->
         <div class="form-group">
           <label>备注</label>
           <textarea v-model="scoreForm.comment" class="form-input form-textarea" rows="3" placeholder="评语或说明"></textarea>
@@ -370,6 +400,10 @@
             <tr>
               <th>年月</th>
               <th>评分</th>
+              <th style="width:90px">当月实际</th>
+              <th style="width:80px">月完成率</th>
+              <th style="width:90px">年度实际</th>
+              <th style="width:80px">年完成率</th>
               <th>备注</th>
               <th style="width: 60px">操作</th>
             </tr>
@@ -380,7 +414,11 @@
               <td>
                 <span class="score-tag" :class="scoreTagClass(s.score)">{{ s.score.toFixed(1) }}</span>
               </td>
-              <td class="muted">{{ s.comment || '-' }}</td>
+              <td class="muted">{{ s.actual_value != null ? s.actual_value : '-' }}</td>
+              <td class="muted">{{ s.monthly_rate != null ? s.monthly_rate.toFixed(1) + '%' : '-' }}</td>
+              <td class="muted">{{ s.yearly_value != null ? s.yearly_value : '-' }}</td>
+              <td class="muted">{{ s.yearly_rate != null ? s.yearly_rate.toFixed(1) + '%' : '-' }}</td>
+              <td class="muted" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ s.comment || '-' }}</td>
               <td>
                 <button class="btn-sm btn-danger" @click="handleDeleteScore(s.id)">删除</button>
               </td>
@@ -528,7 +566,17 @@ const currentProject = computed(() =>
 
 const showGoalModal = ref(false)
 const editingGoalId = ref<number | null>(null)
-const goalForm = reactive({ name: '', description: '' })
+const goalForm = reactive({ name: '', description: '', unit: '' })
+
+const descGoalName = ref('')
+const descGoalContent = ref('')
+const showDescModal = ref(false)
+
+const showGoalDesc = (goal: GoalWithLatestScore) => {
+  descGoalName.value = goal.name
+  descGoalContent.value = goal.description || '暂无描述'
+  showDescModal.value = true
+}
 
 const scoringGoal = ref<GoalWithLatestScore | null>(null)
 const scoreForm = reactive({
@@ -910,6 +958,7 @@ const openAddGoal = () => {
   editingGoalId.value = null
   goalForm.name = ''
   goalForm.description = ''
+  goalForm.unit = ''
   showGoalModal.value = true
 }
 
@@ -917,6 +966,7 @@ const openEditGoal = (goal: GoalWithLatestScore) => {
   editingGoalId.value = goal.id
   goalForm.name = goal.name
   goalForm.description = goal.description ?? ''
+  goalForm.unit = (goal as any).unit ?? ''
   showGoalModal.value = true
 }
 
@@ -927,6 +977,7 @@ const handleSaveGoal = async () => {
     await store.editGoal(editingGoalId.value, pid, {
       name: goalForm.name.trim(),
       description: goalForm.description.trim() || undefined,
+      unit: goalForm.unit.trim() || undefined,
     })
     showToast('目标已更新')
   } else {
@@ -1788,4 +1839,48 @@ const handleDeleteScore = async (scoreId: number) => {
 
 .rating-option.green { border-color: rgba(16, 185, 129, 0.3); }
 .rating-option.red { border-color: rgba(239, 68, 68, 0.3); }
+
+/* Score Modal - Extra Fields */
+.score-modal-wide {
+  max-width: 580px;
+}
+
+.score-extra-fields {
+  margin-bottom: 8px;
+}
+
+.score-field-row {
+  display: flex;
+  gap: 12px;
+}
+
+.score-field {
+  flex: 1;
+}
+
+.goal-unit-tag {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.goal-desc-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #3b82f6;
+  background: rgba(59,130,246,0.12);
+  border-radius: 50%;
+  cursor: pointer;
+  vertical-align: middle;
+  transition: background 0.15s;
+}
+.goal-desc-icon:hover {
+  background: rgba(59,130,246,0.25);
+}
 </style>

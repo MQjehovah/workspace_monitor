@@ -47,6 +47,7 @@
         <div class="tab-bar">
           <button class="tab-btn" :class="{ active: activeTab === 'goals' }" @click="activeTab = 'goals'">目标评分</button>
           <button class="tab-btn" :class="{ active: activeTab === 'milestones' }" @click="activeTab = 'milestones'">项目里程碑</button>
+          <button class="tab-btn" :class="{ active: activeTab === 'subteams' }" @click="activeTab = 'subteams'">子团队</button>
           <button class="tab-btn" :class="{ active: activeTab === 'reports' }" @click="activeTab = 'reports'">月度报告</button>
         </div>
 
@@ -55,19 +56,42 @@
             <div v-for="goal in project.goals" :key="goal.id" class="goal-item">
               <div class="goal-top">
                 <span class="goal-name">{{ goal.name }}</span>
+                <span v-if="goal.description" class="goal-desc-icon" @click.stop="showGoalDesc(goal)" title="查看描述">?</span>
               </div>
-              <div class="goal-score-display">
-                <span class="score-num" :class="getScoreClass(goal.latest_score)">
-                  {{ goal.latest_score !== null ? goal.latest_score.toFixed(1) : '未评分' }}
-                </span>
-                <span v-if="goal.latest_year && goal.latest_month" class="score-date">
-                  {{ goal.latest_year }}/{{ goal.latest_month }}
-                </span>
-              </div>
-              <div v-if="goal.latest_comment" class="goal-comment-mobile">{{ goal.latest_comment }}</div>
-              <div class="goal-bar">
-                <div class="progress-bar">
-                  <div class="progress-fill" :class="getScoreBarClass(goal.latest_score)" :style="{ width: (goal.latest_score || 0) + '%' }"></div>
+              <div class="goal-details">
+                <div class="detail-row">
+                  <span class="detail-label">评分</span>
+                  <span class="detail-value score" :class="getScoreClass(goal.latest_score)">
+                    {{ goal.latest_score !== null ? goal.latest_score.toFixed(1) : '未评分' }}
+                  </span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">月份</span>
+                  <span class="detail-value">{{ goal.latest_year && goal.latest_month ? goal.latest_month + '月' : '-' }}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">当月目标</span>
+                  <span class="detail-value">{{ goal.latest_monthly_value != null ? goal.latest_monthly_value : '-' }}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">当月实际</span>
+                  <span class="detail-value actual">{{ goal.latest_monthly_actual != null ? goal.latest_monthly_actual : '-' }}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">月完成率</span>
+                  <span class="detail-value">{{ goal.latest_monthly_rate != null ? goal.latest_monthly_rate.toFixed(2) + '%' : '-' }}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">年度目标</span>
+                  <span class="detail-value">{{ goal.yearly_target != null ? goal.yearly_target : '-' }}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">年度实际</span>
+                  <span class="detail-value actual">{{ goal.latest_yearly_value != null ? goal.latest_yearly_value : '-' }}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">年完成率</span>
+                  <span class="detail-value">{{ goal.latest_yearly_rate != null ? goal.latest_yearly_rate.toFixed(2) + '%' : '-' }}</span>
                 </div>
               </div>
             </div>
@@ -96,6 +120,35 @@
             </div>
           </div>
           <div v-else class="empty-hint">暂无里程碑数据</div>
+        </template>
+
+        <template v-if="activeTab === 'subteams'">
+          <div v-if="project.sub_teams && project.sub_teams.length > 0" class="subteams-list">
+            <div v-for="st in project.sub_teams" :key="st.id" class="subteam-card">
+              <div class="st-card-header">
+                <div>
+                  <h3 class="st-name">{{ st.name }}</h3>
+                  <span v-if="st.leader" class="st-leader">负责人：{{ st.leader }}</span>
+                </div>
+                <div v-if="st.ratings && st.ratings.length > 0" class="st-rating-badge-wrap">
+                  <span class="st-rating-badge" :class="getRatingClass(st.ratings[0].rating)">{{ st.ratings[0].rating }}</span>
+                  <span class="st-rating-date">{{ st.ratings[0].year }}/{{ st.ratings[0].month }}</span>
+                </div>
+              </div>
+              <div v-if="st.members && st.members.length > 0" class="st-members">
+                <div v-for="m in st.members" :key="m.id" class="st-member-row">
+                  <span class="st-member-name">{{ m.name }}<span v-if="m.role" class="st-member-role">{{ m.role }}</span></span>
+                  <span class="st-member-score"
+                    :class="memberScoreClass(getMemberScore(m.id, st.id))"
+                    @click="showMemberScoreInfo(m, st)">
+                    {{ getMemberScoreText(m.id, st.id) }}
+                  </span>
+                </div>
+              </div>
+              <div v-else class="st-no-members">暂无成员</div>
+            </div>
+          </div>
+          <div v-else class="empty-hint">暂无子团队数据</div>
         </template>
 
         <template v-if="activeTab === 'reports'">
@@ -136,17 +189,13 @@
         <span class="nav-icon">📊</span>
         <span>总览</span>
       </router-link>
-      <router-link to="/mobile" class="nav-item">
-        <span class="nav-icon">📋</span>
-        <span>专项</span>
+      <router-link to="/mobile/performance" class="nav-item">
+        <span class="nav-icon">👥</span>
+        <span>绩效</span>
       </router-link>
-      <router-link to="/mobile/analysis" class="nav-item">
-        <span class="nav-icon">📈</span>
-        <span>分析</span>
-      </router-link>
-      <router-link to="/mobile/alerts" class="nav-item">
-        <span class="nav-icon">⚠️</span>
-        <span>预警</span>
+      <router-link to="/mobile/goals" class="nav-item">
+        <span class="nav-icon">🎯</span>
+        <span>目标</span>
       </router-link>
     </nav>
 
@@ -168,6 +217,14 @@
       </template>
       <iframe v-else :src="fullscreenIframeSrc" class="pdf-fullscreen-iframe"></iframe>
     </div>
+    <!-- 目标描述弹窗 -->
+    <div v-if="showDescModal" class="desc-modal-mask" @click.self="showDescModal = false">
+      <div class="desc-modal-box">
+        <h3>{{ descGoalName }}</h3>
+        <p class="desc-content">{{ descGoalContent }}</p>
+        <button class="desc-close-btn" @click="showDescModal = false">关闭</button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -175,6 +232,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useProjectStore } from '@/stores/project'
+import { getMemberPerformance } from '@/api'
 import MarkdownIt from 'markdown-it'
 
 const isAndroid = /Android/i.test(navigator.userAgent)
@@ -190,7 +248,17 @@ const getPdfUrl = (pdfPath: string | null) => {
 
 const route = useRoute()
 const store = useProjectStore()
-const activeTab = ref<'goals' | 'milestones' | 'reports'>('goals')
+
+const descGoalName = ref('')
+const descGoalContent = ref('')
+const showDescModal = ref(false)
+
+const showGoalDesc = (goal: any) => {
+  descGoalName.value = goal.name
+  descGoalContent.value = goal.description || '暂无描述'
+  showDescModal.value = true
+}
+const activeTab = ref<'goals' | 'milestones' | 'subteams' | 'reports'>('goals')
 
 const getStatusText = (status: string) => {
   const map: Record<string, string> = { healthy: '健康', warning: '需关注', risk: '高风险' }
@@ -211,23 +279,29 @@ const getScoreBarClass = (score: number | null) => {
   return 'red'
 }
 
+const getRatingClass = (rating: string) => {
+  if (rating === '达成') return 'green'
+  return 'red'
+}
+
 onMounted(async () => {
   const id = Number(route.params.id)
   await store.fetchProjects()
   await store.fetchProjectDetail(id)
+  fetchMemberScores(id)
 })
 
 const project = computed(() => store.currentProject)
 
 const achievedTeamCount = computed(() => {
   if (!project.value?.sub_teams) return 0
-  const allRatings = project.value.sub_teams.flatMap(st => st.ratings)
+  const allRatings = project.value.sub_teams.flatMap(st => st.ratings || [])
   if (allRatings.length === 0) return 0
   const sorted = [...allRatings].sort((a, b) => (b.year - a.year) || (b.month - a.month))
   const latestYear = sorted[0].year
   const latestMonth = sorted[0].month
   return project.value.sub_teams.filter(st =>
-    st.ratings.some(r => r.year === latestYear && r.month === latestMonth && r.rating === '达成')
+    (st.ratings || []).some(r => r.year === latestYear && r.month === latestMonth && r.rating === '达成')
   ).length
 })
 
@@ -284,6 +358,69 @@ const sortedMilestones = computed(() => {
     return a.due_date.localeCompare(b.due_date)
   })
 })
+
+// ====== 成员每月评分相关（与电脑端保持一致）======
+interface MemberScoreItem {
+  member_id: number
+  member_name: string
+  sub_team_id: number
+  sub_team_name: string
+  scores: Record<string, number | null>
+}
+
+const memberScores = ref<MemberScoreItem[]>([])
+
+const fetchMemberScores = async (projectId: number) => {
+  try {
+    const res = await getMemberPerformance(projectId)
+    const raw: any = res.data || []
+    const rows = raw.rows || raw
+    memberScores.value = (rows as any[]).map((row: any) => ({
+      member_id: row.member_id,
+      member_name: row.member_name,
+      sub_team_id: row.sub_team_id ?? row.project_id ?? 0,
+      sub_team_name: row.sub_team_name || '',
+      scores: (row.scores || []).reduce((acc, s) => {
+        acc[s.label] = s.score != null ? s.score : null
+        return acc
+      }, {} as Record<string, number | null>),
+    }))
+  } catch (e: any) {
+    console.error('[MobileProjectDetail] fetchMemberScores error:', e)
+    memberScores.value = []
+  }
+}
+
+const getMemberScore = (memberId: number, _subTeamId: number): number | null => {
+  const item = memberScores.value.find(m => m.member_id === memberId)
+  if (!item || !item.scores) return null
+  const months = Object.keys(item.scores).sort().reverse()
+  for (const m of months) {
+    if (item.scores[m] !== null && item.scores[m] !== undefined) {
+      return item.scores[m]
+    }
+  }
+  return null
+}
+
+const getMemberScoreText = (memberId: number, subTeamId: number): string => {
+  const score = getMemberScore(memberId, subTeamId)
+  if (score === null) return '未评'
+  return `${score}分`
+}
+
+const memberScoreClass = (score: number | null): string => {
+  if (score === null) return ''
+  if (score >= 4) return 'score-high'
+  if (score >= 3) return 'score-mid'
+  return 'score-low'
+}
+
+const showMemberScoreInfo = (member: any, subTeam: any) => {
+  const score = getMemberScore(member.id, subTeam.id)
+  const text = score !== null ? `${score} 分` : '暂无评分'
+  alert(`${member.name} (${subTeam.name})\n最新专项绩效：${text}`)
+}
 </script>
 
 <style scoped>
@@ -561,40 +698,47 @@ const sortedMilestones = computed(() => {
   font-weight: 600;
 }
 
-.goal-score-display {
+.goal-details {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.score-num {
-  font-size: 22px;
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.08);
+}
+
+.detail-row:last-child {
+  border-bottom: none;
+}
+
+.detail-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.detail-value {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.detail-value.score {
+  font-size: 18px;
   font-weight: 700;
 }
 
-.score-num.green { color: var(--accent-green); }
-.score-num.orange { color: var(--accent-orange); }
-.score-num.red { color: var(--accent-red); }
-.score-num.muted { color: var(--text-muted); font-size: 14px; }
+.detail-value.score.green { color: var(--accent-green); }
+.detail-value.score.orange { color: var(--accent-orange); }
+.detail-value.score.red { color: var(--accent-red); }
+.detail-value.score.muted { color: var(--text-muted); font-size: 14px; }
 
-.score-date {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.goal-comment-mobile {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-bottom: 6px;
-  padding: 6px 8px;
-  background: var(--bg-primary);
-  border-radius: 4px;
-  line-height: 1.5;
-}
-
-.goal-bar .progress-bar {
-  width: 100%;
+.detail-value.actual {
+  color: var(--accent-blue);
+  font-weight: 600;
 }
 
 .progress-fill.green { background: var(--accent-green); }
@@ -657,6 +801,115 @@ const sortedMilestones = computed(() => {
 .nav-icon {
   font-size: 22px;
 }
+
+/* 子团队样式 */
+.subteams-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.subteam-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.st-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.st-name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.st-leader {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.st-rating-badge-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.st-rating-badge {
+  display: inline-block;
+  padding: 2px 12px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.st-rating-badge.green { background: rgba(16, 185, 129, 0.2); color: var(--accent-green); }
+.st-rating-badge.red { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); }
+
+.st-rating-date {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.st-members {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.st-member-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.08);
+}
+
+.st-member-row:last-child {
+  border-bottom: none;
+}
+
+.st-member-name {
+  font-size: 13px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.st-member-role {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.st-no-members {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.st-member-score {
+  cursor: pointer;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  transition: background 0.15s;
+  user-select: none;
+}
+
+.st-member-score:hover {
+  opacity: 0.85;
+}
+
+.st-member-score.score-high { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); }
+.st-member-score.score-mid { background: rgba(245, 158, 11, 0.15); color: var(--accent-orange); }
+.st-member-score.score-low { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); }
 
 .report-list {
   display: flex;
@@ -810,4 +1063,33 @@ const sortedMilestones = computed(() => {
 .md-preview :deep(code) { background: var(--bg-card); padding: 1px 3px; border-radius: 3px; font-size: 12px; }
 .md-preview :deep(pre) { background: var(--bg-card); padding: 10px; border-radius: 6px; overflow-x: auto; }
 .md-preview :deep(pre code) { background: none; padding: 0; }
+
+.goal-desc-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; margin-left: 4px; font-size: 11px; font-weight: 700;
+  color: var(--accent-blue); background: rgba(59,130,246,0.12); border-radius: 50%;
+  cursor: pointer; vertical-align: middle; flex-shrink: 0;
+}
+.desc-modal-mask {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  display: flex; align-items: center; justify-content: center; z-index: 9999;
+  padding: 16px;
+}
+.desc-modal-box {
+  background: var(--bg-card, #1e293b); border-radius: 12px; padding: 20px;
+  max-width: 400px; width: 100%; max-height: 70vh;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+  display: flex; flex-direction: column;
+  box-sizing: border-box;
+}
+.desc-modal-box h3 { margin: 0 0 12px; font-size: 15px; color: var(--text-primary, #e2e8f0); }
+.desc-content {
+  line-height: 1.7; color: var(--text-secondary, #94a3b8);
+  white-space: pre-wrap; margin: 0 0 16px; font-size: 13px;
+  overflow-y: auto; flex: 1;
+}
+.desc-close-btn {
+  padding: 8px 0; background: var(--accent-blue, #3b82f6); color: #fff;
+  border: none; border-radius: 8px; cursor: pointer; font-size: 14px; width: 100%;
+}
 </style>

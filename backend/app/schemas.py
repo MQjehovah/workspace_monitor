@@ -47,6 +47,9 @@ class StatsResponse(BaseModel):
 class GoalBase(BaseModel):
     name: str
     description: Optional[str] = None
+    monthly_target: Optional[str] = None
+    yearly_target: Optional[str] = None
+    unit: str = ""
 
 
 class GoalCreate(GoalBase):
@@ -56,6 +59,9 @@ class GoalCreate(GoalBase):
 class GoalUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    monthly_target: Optional[str] = None
+    yearly_target: Optional[str] = None
+    unit: Optional[str] = None
 
 
 class GoalScoreBase(BaseModel):
@@ -63,6 +69,11 @@ class GoalScoreBase(BaseModel):
     month: int
     score: float
     comment: Optional[str] = None
+    monthly_value: Optional[str] = None
+    actual_value: Optional[str] = None
+    monthly_rate: Optional[float] = None
+    yearly_value: Optional[str] = None
+    yearly_rate: Optional[float] = None
 
 
 class GoalScoreCreate(GoalScoreBase):
@@ -90,10 +101,18 @@ class GoalWithLatestScore(BaseModel):
     id: int
     name: str
     description: Optional[str] = None
+    monthly_target: Optional[str] = None
+    yearly_target: Optional[str] = None
+    unit: Optional[str] = ""
     latest_score: Optional[float] = None
     latest_year: Optional[int] = None
     latest_month: Optional[int] = None
     latest_comment: Optional[str] = None
+    latest_monthly_value: Optional[str] = None  # 月度目标值
+    latest_monthly_actual: Optional[str] = None  # 月度实际值
+    latest_monthly_rate: Optional[float] = None
+    latest_yearly_value: Optional[str] = None
+    latest_yearly_rate: Optional[float] = None
 
 
 class MilestoneBase(BaseModel):
@@ -215,6 +234,112 @@ class SubTeamOut(SubTeamBase):
 
     class Config:
         from_attributes = True
+
+
+# ==================== 成员每月评级 Schema ====================
+
+class MemberMonthlyScoreBase(BaseModel):
+    year: int
+    month: int
+    score: int  # 1-5分制
+    comment: Optional[str] = ""
+
+
+class MemberMonthlyScoreCreate(MemberMonthlyScoreBase):
+    pass
+
+
+class MemberMonthlyScoreUpdate(BaseModel):
+    score: Optional[int] = None
+    comment: Optional[str] = None
+
+
+class MemberMonthlyScoreOut(MemberMonthlyScoreBase):
+    id: int
+    sub_team_member_id: int
+
+    class Config:
+        from_attributes = True
+
+
+class MemberPerformanceRow(BaseModel):
+    """成员绩效行 - 用于列表展示"""
+    member_id: int
+    member_name: str
+    member_role: Optional[str] = None
+    sub_team_id: int
+    sub_team_name: str
+    project_id: int
+    project_name: str
+    scores: list[MemberMonthlyScoreOut] = []
+
+
+class MemberPerformanceResponse(BaseModel):
+    """成员绩效查询响应"""
+    total: int
+    rows: list[MemberPerformanceRow] = []
+
+
+class BatchImportResult(BaseModel):
+    """批量导入结果"""
+    success_count: int
+    fail_count: int
+    errors: list[str] = []
+
+
+# ==================== 目标管理扩展 Schema ====================
+
+class GoalTargetUpdate(BaseModel):
+    """目标值更新"""
+    monthly_target: Optional[float] = None
+    yearly_target: Optional[float] = None
+
+
+class GoalDefinitionUpdate(BaseModel):
+    """目标定义更新"""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    unit: Optional[str] = None
+
+
+class GoalManagementItem(BaseModel):
+    """目标管理页面的单个项目-目标项"""
+    project_id: int
+    project_name: str
+    goals: list[GoalWithLatestScore] = []
+
+
+class GoalManagementResponse(BaseModel):
+    """目标管理页面响应"""
+    projects: list[GoalManagementItem] = []
+
+
+# ========== 目标看板（Dashboard）数据结构 =========
+
+class GoalMonthScore(BaseModel):
+    """目标看板中单月数据"""
+    month: int
+    monthly_target: Optional[float] = None   # 月度目标值
+    actual_value: Optional[str] = None       # 实际值
+    completion_rate: Optional[float] = None  # 完成率(%)
+    comment: Optional[str] = None            # 备注
+
+
+class GoalDashboardRow(BaseModel):
+    """目标看板中的单行（一个goal）"""
+    id: int
+    project_id: int
+    project_name: str
+    goal_name: str
+    unit: str = ""
+    yearly_target: Optional[float] = None    # 年度目标值
+    months: list[GoalMonthScore] = []        # 各月数据
+
+
+class GoalDashboardResponse(BaseModel):
+    """目标看板响应"""
+    months: list[int] = []                    # 显示的月份列表，如 [4,5,6,7,8,9,10,11,12]
+    rows: list[GoalDashboardRow] = []         # 所有目标的行数据
 
 
 ProjectWithGoals.model_rebuild()

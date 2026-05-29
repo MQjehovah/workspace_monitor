@@ -54,17 +54,21 @@
         <table v-if="project.goals && project.goals.length > 0" class="goal-table">
           <thead>
             <tr>
-              <th>目标名称</th>
-              <th style="width:100px">评分</th>
-              <th style="width:100px">月份</th>
-              <th style="width:240px">进度</th>
+              <th style="min-width:280px">目标名称</th>
+              <th style="width:90px">评分</th>
+              <th style="width:80px">月份</th>
+              <th style="width:90px">当月目标</th>
+              <th style="width:90px">当月实际</th>
+              <th style="width:75px">月完成率</th>
+              <th style="width:90px">年度目标</th>
+              <th style="width:90px">年度实际</th>
+              <th style="width:75px">年完成率</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="goal in project.goals" :key="goal.id">
               <td>
-                <div class="goal-name">{{ goal.name }}</div>
-                <div v-if="goal.latest_comment" class="goal-comment">{{ goal.latest_comment }}</div>
+                <div class="goal-name">{{ goal.name }}<span v-if="goal.description" class="goal-desc-icon" @click.stop="showGoalDesc(goal)" title="查看描述">?</span></div>
               </td>
               <td>
                 <span class="goal-score-value" :class="getScoreClass(goal.latest_score)">
@@ -72,16 +76,15 @@
                 </span>
               </td>
               <td class="goal-score-date">
-                <span v-if="goal.latest_year && goal.latest_month">{{ goal.latest_year }}/{{ goal.latest_month }}</span>
+                <span v-if="goal.latest_year && goal.latest_month">{{ goal.latest_month }}月</span>
                 <span v-else>-</span>
               </td>
-              <td>
-                <div class="goal-score-bar">
-                  <div class="progress-bar">
-                    <div class="progress-fill" :class="getScoreBarClass(goal.latest_score)" :style="{ width: (goal.latest_score || 0) + '%' }"></div>
-                  </div>
-                </div>
-              </td>
+              <td class="goal-extra-cell muted">{{ goal.latest_monthly_value != null ? goal.latest_monthly_value : '-' }}</td>
+              <td class="goal-extra-cell muted">{{ goal.latest_monthly_actual != null ? goal.latest_monthly_actual : '-' }}</td>
+              <td class="goal-extra-cell muted">{{ goal.latest_monthly_rate != null ? goal.latest_monthly_rate.toFixed(2) + '%' : '-' }}</td>
+              <td class="goal-extra-cell muted">{{ goal.yearly_target != null ? goal.yearly_target : '-' }}</td>
+              <td class="goal-extra-cell muted">{{ goal.latest_yearly_value != null ? goal.latest_yearly_value : '-' }}</td>
+              <td class="goal-extra-cell muted">{{ goal.latest_yearly_rate != null ? goal.latest_yearly_rate.toFixed(2) + '%' : '-' }}</td>
             </tr>
           </tbody>
         </table>
@@ -90,6 +93,7 @@
         <div class="goal-summary" v-if="project.goals && project.goals.length > 0">
           <span class="summary-label">项目综合得分</span>
           <span class="summary-value">{{ project.score.toFixed(1) }}</span>
+          <span class="performance-badge" :class="perfLevel.class">{{ perfLevel.label }}</span>
           <span class="summary-hint">（当月已评分目标的平均值）</span>
         </div>
       </div>
@@ -113,22 +117,27 @@
       </div>
 
       <div v-if="activeTab === 'subteams'" class="tab-content">
-        <div v-if="project.sub_teams && project.sub_teams.length > 0" class="subteams-grid">
+      <div v-if="project.sub_teams && project.sub_teams.length > 0" class="subteams-grid">
           <div v-for="st in project.sub_teams" :key="st.id" class="subteam-card">
             <div class="st-card-header">
               <div>
                 <h3 class="st-name">{{ st.name }}</h3>
                 <span v-if="st.leader" class="st-leader">负责人：{{ st.leader }}</span>
               </div>
-              <div v-if="st.ratings.length > 0" class="st-rating-badge-wrap">
+              <div v-if="st.ratings && st.ratings.length > 0" class="st-rating-badge-wrap">
                 <span class="st-rating-badge" :class="getRatingClass(st.ratings[0].rating)">{{ st.ratings[0].rating }}</span>
                 <span class="st-rating-date">{{ st.ratings[0].year }}/{{ st.ratings[0].month }}</span>
               </div>
             </div>
-            <div v-if="st.members.length > 0" class="st-members">
-              <span v-for="m in st.members" :key="m.id" class="st-member-chip">
-                {{ m.name }}<span v-if="m.role" class="st-member-role">{{ m.role }}</span>
-              </span>
+            <div v-if="st.members && st.members.length > 0" class="st-members">
+              <div v-for="m in st.members" :key="m.id" class="st-member-row">
+                <span class="st-member-name">{{ m.name }}<span v-if="m.role" class="st-member-role">{{ m.role }}</span></span>
+                <span class="st-member-score"
+                  :class="memberScoreClass(getMemberScore(m.id, st.id))"
+                  @click="showMemberScoreInfo(m, st)">
+                  {{ getMemberScoreText(m.id, st.id) }}
+                </span>
+              </div>
             </div>
             <div v-else class="st-no-members">暂无成员</div>
           </div>
@@ -170,6 +179,15 @@
       </object>
     </div>
 
+    <!-- 目标描述弹窗 -->
+    <div v-if="showDescModal" class="desc-modal-mask" @click.self="showDescModal = false">
+      <div class="desc-modal-box">
+        <h3>{{ descGoalName }}</h3>
+        <p class="desc-content">{{ descGoalContent }}</p>
+        <button class="desc-close-btn" @click="showDescModal = false">关闭</button>
+      </div>
+    </div>
+
     <div v-if="!project" class="loading">加载中...</div>
   </div>
 </template>
@@ -178,6 +196,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useProjectStore } from '@/stores/project'
+import { getMemberPerformance } from '@/api'
 import dayjs from 'dayjs'
 import MarkdownIt from 'markdown-it'
 
@@ -194,17 +213,27 @@ const route = useRoute()
 const store = useProjectStore()
 const activeTab = ref<'goals' | 'milestones' | 'subteams' | 'reports'>('goals')
 
+const descGoalName = ref('')
+const descGoalContent = ref('')
+const showDescModal = ref(false)
+
+const showGoalDesc = (goal: any) => {
+  descGoalName.value = goal.name
+  descGoalContent.value = goal.description || '暂无描述'
+  showDescModal.value = true
+}
+
 const currentTime = computed(() => dayjs().format('YYYY-MM-DD HH:mm'))
 
 const achievedTeamCount = computed(() => {
   if (!project.value?.sub_teams) return 0
-  const allRatings = project.value.sub_teams.flatMap(st => st.ratings)
+  const allRatings = project.value.sub_teams.flatMap(st => st.ratings || [])
   if (allRatings.length === 0) return 0
   const sorted = [...allRatings].sort((a, b) => (b.year - a.year) || (b.month - a.month))
   const latestYear = sorted[0].year
   const latestMonth = sorted[0].month
   return project.value.sub_teams.filter(st =>
-    st.ratings.some(r => r.year === latestYear && r.month === latestMonth && r.rating === '达成')
+    (st.ratings || []).some(r => r.year === latestYear && r.month === latestMonth && r.rating === '达成')
   ).length
 })
 
@@ -236,6 +265,7 @@ const getScoreBarClass = (score: number | null) => {
 onMounted(async () => {
   const id = Number(route.params.id)
   await store.fetchProjectDetail(id)
+  fetchMemberScores(id)
 })
 
 const project = computed(() => store.currentProject)
@@ -258,6 +288,85 @@ const getRatingClass = (rating: string) => {
   if (rating === '达成') return 'green'
   return 'red'
 }
+
+// ====== 成员每月评分相关 ======
+interface MemberScoreItem {
+  member_id: number
+  member_name: string
+  sub_team_id: number
+  sub_team_name: string
+  scores: Record<string, number | null>  // key: "YYYY-MM", value: score 1-5
+}
+
+const memberScores = ref<MemberScoreItem[]>([])
+
+const fetchMemberScores = async (projectId: number) => {
+  try {
+    const res = await getMemberPerformance(projectId)
+    // 后端返回格式：{ months:[], rows:[{member_id, member_name, sub_team_name, scores:[{label,score},...]}] }
+    const raw: any = res.data || []
+    const rows = raw.rows || raw
+    memberScores.value = (rows as any[]).map((row: any) => ({
+      member_id: row.member_id,
+      member_name: row.member_name,
+      sub_team_id: row.sub_team_id ?? row.project_id ?? 0,
+      sub_team_name: row.sub_team_name || '',
+      scores: (row.scores || []).reduce((acc, s) => {
+        acc[s.label] = s.score != null ? s.score : null
+        return acc
+      }, {} as Record<string, number | null>),
+    }))
+  } catch (e) {
+    console.error('[ProjectDetail] fetchMemberScores error:', e)
+    memberScores.value = []
+  }
+}
+
+const getMemberScore = (memberId: number, _subTeamId: number): number | null => {
+  // 用 member_id 匹配（项目内 member_id 唯一），subTeamId 保留接口兼容
+  const item = memberScores.value.find(m => m.member_id === memberId)
+  if (!item || !item.scores) {
+    return null
+  }
+  // 获取最近一个月的分数（按 key 降序取第一个有值的）
+  const months = Object.keys(item.scores).sort().reverse()
+  for (const m of months) {
+    if (item.scores[m] !== null && item.scores[m] !== undefined) {
+      return item.scores[m]
+    }
+  }
+  return null
+}
+
+const getMemberScoreText = (memberId: number, subTeamId: number): string => {
+  const score = getMemberScore(memberId, subTeamId)
+  if (score === null) return '未评'
+  return `${score}分`
+}
+
+const memberScoreClass = (score: number | null): string => {
+  if (score === null) return ''
+  if (score >= 4) return 'score-high'
+  if (score >= 3) return 'score-mid'
+  return 'score-low'
+}
+
+const showMemberScoreInfo = (member: any, subTeam: any) => {
+  const score = getMemberScore(member.id, subTeam.id)
+  const text = score !== null ? `${score} 分` : '暂无评分'
+  alert(`${member.name} (${subTeam.name})\n最新专项绩效：${text}`)
+}
+
+// 项目绩效等级：根据综合得分映射
+const perfLevel = computed(() => {
+  const score = project.value?.score ?? 0
+  if (score < 40) return { level: 1, label: '1分 差', class: 'level-poor' }
+  if (score < 55) return { level: 2, label: '2分 合格', class: 'level-pass' }
+  if (score < 70) return { level: 3, label: '3分 良', class: 'level-good' }
+  if (score < 85) return { level: 4, label: '4分 优秀', class: 'level-excellent' }
+  return { level: 5, label: '5分 卓越', class: 'level-outstanding' }
+})
+
 </script>
 
 <style scoped>
@@ -434,6 +543,9 @@ const getRatingClass = (rating: string) => {
   font-size: 13px;
   font-weight: 600;
   line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .goal-score-row {
@@ -797,4 +909,94 @@ const getRatingClass = (rating: string) => {
   color: var(--text-muted);
   font-size: 12px;
 }
+
+.st-member-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.08);
+}
+
+.st-member-row:last-child {
+  border-bottom: none;
+}
+
+.st-member-name {
+  font-size: 13px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.st-member-score {
+  cursor: pointer;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  transition: background 0.15s;
+  user-select: none;
+}
+
+.st-member-score:hover {
+  opacity: 0.85;
+}
+
+.st-member-score.score-high { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); }
+.st-member-score.score-mid { background: rgba(245, 158, 11, 0.15); color: var(--accent-orange); }
+.st-member-score.score-low { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); }
+
+.goal-unit-tag {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 4px;
+  font-weight: 400;
+}
+
+.goal-extra-cell {
+  text-align: center;
+  font-size: 13px;
+}
+
+.performance-badge {
+  display: inline-block;
+  padding: 4px 14px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 700;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.performance-badge.level-poor { background: rgba(239, 68, 68, 0.15); color: #dc2626; }
+.performance-badge.level-pass { background: rgba(245, 158, 11, 0.15); color: #d97706; }
+.performance-badge.level-good { background: rgba(59, 130, 246, 0.15); color: #2563eb; }
+.performance-badge.level-excellent { background: rgba(16, 185, 129, 0.15); color: #059669; }
+.performance-badge.level-outstanding { background: rgba(139, 92, 246, 0.15); color: #7c3aed; }
+
+.goal-desc-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px; margin-left: 4px; font-size: 10px; font-weight: 700;
+  color: #3b82f6; background: rgba(59,130,246,0.12); border-radius: 50%;
+  cursor: pointer; vertical-align: middle; flex-shrink: 0;
+  transition: background 0.15s;
+}
+.goal-desc-icon:hover { background: rgba(59,130,246,0.25); }
+
+.desc-modal-mask {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.35);
+  display: flex; align-items: center; justify-content: center; z-index: 999;
+}
+.desc-modal-box {
+  background: var(--bg-card, #1e293b); border-radius: 12px; padding: 24px 28px;
+  max-width: 460px; width: 90%; box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+}
+.desc-modal-box h3 { margin: 0 0 14px; font-size: 16px; color: var(--text-primary, #e2e8f0); }
+.desc-content { line-height: 1.7; color: var(--text-secondary, #94a3b8); white-space: pre-wrap; margin: 0 0 18px; }
+.desc-close-btn {
+  padding: 6px 20px; background: #3b82f6; color: #fff;
+  border: none; border-radius: 6px; cursor: pointer; font-size: 13px;
+}
+.desc-close-btn:hover { background: #2563eb; }
 </style>

@@ -47,17 +47,13 @@
         <span class="nav-icon">📊</span>
         <span>总览</span>
       </router-link>
-      <router-link to="/mobile" class="nav-item">
-        <span class="nav-icon">📋</span>
-        <span>专项</span>
+      <router-link to="/mobile/performance" class="nav-item">
+        <span class="nav-icon">👥</span>
+        <span>绩效</span>
       </router-link>
-      <router-link to="/mobile/analysis" class="nav-item">
-        <span class="nav-icon">📈</span>
-        <span>分析</span>
-      </router-link>
-      <router-link to="/mobile/alerts" class="nav-item">
-        <span class="nav-icon">⚠️</span>
-        <span>预警</span>
+      <router-link to="/mobile/goals" class="nav-item">
+        <span class="nav-icon">🎯</span>
+        <span>目标</span>
       </router-link>
     </nav>
   </div>

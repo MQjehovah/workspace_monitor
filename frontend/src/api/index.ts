@@ -6,6 +6,8 @@ const api = axios.create({
   baseURL: API_BASE_URL
 })
 
+export { api }
+
 export interface Project {
   id: number
   name: string
@@ -43,16 +45,28 @@ export interface GoalScore {
   month: number
   score: number
   comment?: string
+  monthly_value?: string | null
+  monthly_rate?: number | null
+  yearly_value?: string | null
+  yearly_rate?: number | null
 }
 
 export interface GoalWithLatestScore {
   id: number
   name: string
   description?: string
+  unit?: string | null
+  monthly_target?: number | null
+  yearly_target?: number | null
   latest_score: number | null
   latest_year: number | null
   latest_month: number | null
   latest_comment: string | null
+  latest_monthly_value?: string | null  // 月度目标值
+  latest_monthly_actual?: string | null  // 月度实际值
+  latest_monthly_rate?: number | null
+  latest_yearly_value?: string | null
+  latest_yearly_rate?: number | null
 }
 
 export interface Milestone {
@@ -118,12 +132,12 @@ export const deleteProject = (id: number) => api.delete(`/api/projects/${id}`)
 export const getProjectGoals = (projectId: number) => api.get<Goal[]>(`/api/projects/${projectId}/goals`)
 export const createGoal = (projectId: number, data: { name: string; description?: string }) =>
   api.post<Goal>(`/api/projects/${projectId}/goals`, data)
-export const updateGoal = (goalId: number, data: { name?: string; description?: string }) =>
+export const updateGoal = (goalId: number, data: { name?: string; description?: string; unit?: string }) =>
   api.put<Goal>(`/api/goals/${goalId}`, data)
 export const deleteGoal = (goalId: number) => api.delete(`/api/goals/${goalId}`)
 
 export const getGoalScores = (goalId: number) => api.get<GoalScore[]>(`/api/goals/${goalId}/scores`)
-export const upsertGoalScore = (goalId: number, data: { year: number; month: number; score: number; comment?: string }) =>
+export const upsertGoalScore = (goalId: number, data: { year: number; month: number; score: number; comment?: string; monthly_value?: string | null; monthly_rate?: number | null; yearly_value?: string | null; yearly_rate?: number | null }) =>
   api.post<GoalScore>(`/api/goals/${goalId}/scores`, data)
 export const deleteScore = (scoreId: number) => api.delete(`/api/scores/${scoreId}`)
 
@@ -165,3 +179,17 @@ export const getSubTeamRatings = (subteamId: number) => api.get<SubTeamRating[]>
 export const deleteSubTeamRating = (ratingId: number) => api.delete(`/api/subteam-ratings/${ratingId}`)
 
 export const seedData = () => api.post('/api/seed')
+
+// ====== 成员每月评分 ======
+export interface MemberPerformanceRow {
+  member_id: number
+  member_name: string
+  sub_team_id: number
+  sub_team_name: string
+  scores: Record<string, number | null>
+}
+
+export const getMemberPerformance = (projectId?: number) =>
+  api.get<MemberPerformanceRow[]>('/api/member-performance', {
+    params: projectId ? { project_id: projectId } : undefined,
+  })

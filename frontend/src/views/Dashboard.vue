@@ -7,6 +7,8 @@
       </div>
       <div class="nav-actions">
         <span class="update-time">数据更新：{{ currentTime }}</span>
+        <router-link to="/member-performance" class="btn-member-perf">成员专项绩效</router-link>
+        <router-link to="/goal-management" class="btn-goal-mgmt">专项目标</router-link>
         <button @click="refresh" class="btn-refresh">手动刷新</button>
         <router-link to="/admin" class="btn-admin">后台管理</router-link>
         <button class="btn-export">导出报告</button>
@@ -170,7 +172,8 @@ onMounted(() => {
   font-size: 12px;
 }
 
-.btn-refresh, .btn-export, .btn-close, .btn-admin {
+.btn-refresh, .btn-export, .btn-close, .btn-admin,
+.btn-member-perf, .btn-goal-mgmt {
   padding: 8px 16px;
   border-radius: 6px;
   border: none;
@@ -192,6 +195,16 @@ onMounted(() => {
 .btn-export {
   background: var(--accent-blue);
   color: white;
+}
+
+.btn-member-perf {
+  background: #1A3A2F;
+  color: var(--accent-green);
+}
+
+.btn-goal-mgmt {
+  background: #2D1B3E;
+  color: var(--accent-purple);
 }
 
 .btn-close {
