@@ -172,6 +172,8 @@ export const updateSubTeam = (subteamId: number, data: { name?: string; leader?:
 export const deleteSubTeam = (subteamId: number) => api.delete(`/api/subteams/${subteamId}`)
 export const addSubTeamMember = (subteamId: number, data: { name: string; role?: string }) =>
   api.post<SubTeamMember>(`/api/subteams/${subteamId}/members`, data)
+export const updateSubTeamMember = (memberId: number, data: { name?: string; role?: string }) =>
+  api.put<SubTeamMember>(`/api/subteam-members/${memberId}`, data)
 export const deleteSubTeamMember = (memberId: number) => api.delete(`/api/subteam-members/${memberId}`)
 export const upsertSubTeamRating = (subteamId: number, data: { year: number; month: number; rating: string; comment?: string }) =>
   api.post<SubTeamRating>(`/api/subteams/${subteamId}/ratings`, data)

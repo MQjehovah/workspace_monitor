@@ -192,7 +192,10 @@
                 <div v-for="m in st.members" :key="m.id" class="member-item">
                   <span class="member-name">{{ m.name }}</span>
                   <span v-if="m.role" class="member-role">{{ m.role }}</span>
-                  <button class="btn-sm btn-danger btn-member-del" @click="handleDeleteMember(m.id)">移除</button>
+                  <div class="member-actions">
+                    <button class="btn-sm btn-edit btn-member-edit" @click="openEditMember(m)">编辑</button>
+                    <button class="btn-sm btn-danger btn-member-del" @click="handleDeleteMember(m.id)">移除</button>
+                  </div>
                 </div>
               </div>
               <div v-else class="no-members">暂无成员</div>
@@ -474,6 +477,25 @@
       </div>
     </div>
 
+    <!-- Edit Member Modal -->
+    <div v-if="showEditMemberModal" class="modal-mask" @click.self="showEditMemberModal = false">
+      <div class="modal-box">
+        <h3>编辑成员</h3>
+        <div class="form-group">
+          <label>成员姓名</label>
+          <input v-model="editMemberForm.name" class="form-input" placeholder="姓名" />
+        </div>
+        <div class="form-group">
+          <label>角色（可选）</label>
+          <input v-model="editMemberForm.role" class="form-input" placeholder="如：开发、测试、产品等" />
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" @click="showEditMemberModal = false">取消</button>
+          <button class="btn-primary" @click="handleSaveEditMember" :disabled="!editMemberForm.name.trim()">保存</button>
+        </div>
+      </div>
+    </div>
+
     <!-- SubTeam Rating Modal -->
     <div v-if="ratingTargetTeam" class="modal-mask" @click.self="ratingTargetTeam = null">
       <div class="modal-box">
@@ -552,8 +574,8 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useProjectStore } from '@/stores/project'
-import { getGoalScores, getMilestones, createMilestone, updateMilestone, deleteMilestone, updateProject, createProject as createProjectApi, deleteProject as deleteProjectApi, createReport, updateReport, deleteReport, uploadReportPdf, deleteReportPdf, createSubTeam, updateSubTeam, deleteSubTeam, addSubTeamMember, deleteSubTeamMember, upsertSubTeamRating, getSubTeamRatings, deleteSubTeamRating } from '@/api'
-import type { GoalWithLatestScore, GoalScore, Milestone as MilestoneType, MonthlyReport as MonthlyReportType, SubTeam as SubTeamType, SubTeamRating as SubTeamRatingType } from '@/api'
+import { getGoalScores, getMilestones, createMilestone, updateMilestone, deleteMilestone, updateProject, createProject as createProjectApi, deleteProject as deleteProjectApi, createReport, updateReport, deleteReport, uploadReportPdf, deleteReportPdf, createSubTeam, updateSubTeam, deleteSubTeam, addSubTeamMember, updateSubTeamMember, deleteSubTeamMember, upsertSubTeamRating, getSubTeamRatings, deleteSubTeamRating } from '@/api'
+import type { GoalWithLatestScore, GoalScore, Milestone as MilestoneType, MonthlyReport as MonthlyReportType, SubTeam as SubTeamType, SubTeamMember as SubTeamMemberType, SubTeamRating as SubTeamRatingType } from '@/api'
 import dayjs from 'dayjs'
 
 const store = useProjectStore()
@@ -616,6 +638,10 @@ const subTeamForm = reactive({ name: '', leader: '', membersText: '' })
 const showMemberModal = ref(false)
 const memberTargetTeam = ref<SubTeamType | null>(null)
 const memberForm = reactive({ name: '', role: '' })
+
+const showEditMemberModal = ref(false)
+const editingMember = ref<SubTeamMemberType | null>(null)
+const editMemberForm = reactive({ name: '', role: '' })
 
 const ratingTargetTeam = ref<SubTeamType | null>(null)
 const ratingForm = reactive({ year: dayjs().year(), month: dayjs().month() + 1, rating: '达成', comment: '' })
@@ -702,6 +728,24 @@ const handleDeleteMember = async (memberId: number) => {
   if (!confirm('确定移除该成员？')) return
   await deleteSubTeamMember(memberId)
   showToast('成员已移除', 'warn')
+  await loadGoals()
+}
+
+const openEditMember = (m: SubTeamMemberType) => {
+  editingMember.value = m
+  editMemberForm.name = m.name
+  editMemberForm.role = m.role || ''
+  showEditMemberModal.value = true
+}
+
+const handleSaveEditMember = async () => {
+  if (!editMemberForm.name.trim() || !editingMember.value) return
+  await updateSubTeamMember(editingMember.value.id, {
+    name: editMemberForm.name.trim(),
+    role: editMemberForm.role.trim() || undefined,
+  })
+  showEditMemberModal.value = false
+  showToast('成员已更新')
   await loadGoals()
 }
 
@@ -1768,7 +1812,18 @@ const handleDeleteScore = async (scoreId: number) => {
   font-size: 11px;
 }
 
+.member-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+
 .btn-member-del {
+  font-size: 11px;
+  padding: 2px 6px;
+}
+
+.btn-member-edit {
   font-size: 11px;
   padding: 2px 6px;
 }

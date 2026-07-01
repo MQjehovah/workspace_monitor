@@ -17,7 +17,7 @@ from app.schemas import (
     MilestoneCreate, MilestoneUpdate, MilestoneOut,
     MonthlyReportCreate, MonthlyReportUpdate, MonthlyReportOut,
     SubTeamCreate, SubTeamUpdate, SubTeamOut,
-    SubTeamMemberCreate, SubTeamMemberOut,
+    SubTeamMemberCreate, SubTeamMemberUpdate, SubTeamMemberOut,
     SubTeamRatingCreate, SubTeamRatingOut,
     MemberMonthlyScoreCreate, MemberMonthlyScoreOut, MemberMonthlyScoreUpdate,
     MemberPerformanceResponse, BatchImportResult,
@@ -782,6 +782,20 @@ async def add_sub_team_member(subteam_id: int, data: SubTeamMemberCreate, db: Se
         raise HTTPException(status_code=404, detail="SubTeam not found")
     member = SubTeamMember(sub_team_id=subteam_id, name=data.name, role=data.role)
     db.add(member)
+    db.commit()
+    db.refresh(member)
+    return member
+
+
+@app.put("/api/subteam-members/{member_id}", response_model=SubTeamMemberOut)
+async def update_sub_team_member(member_id: int, data: SubTeamMemberUpdate, db: Session = Depends(get_db)):
+    member = db.query(SubTeamMember).filter(SubTeamMember.id == member_id).first()
+    if not member:
+        raise HTTPException(status_code=404, detail="Member not found")
+    if data.name is not None:
+        member.name = data.name
+    if data.role is not None:
+        member.role = data.role
     db.commit()
     db.refresh(member)
     return member

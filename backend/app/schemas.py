@@ -185,6 +185,11 @@ class SubTeamMemberCreate(SubTeamMemberBase):
     pass
 
 
+class SubTeamMemberUpdate(BaseModel):
+    name: Optional[str] = None
+    role: Optional[str] = None
+
+
 class SubTeamMemberOut(SubTeamMemberBase):
     id: int
     sub_team_id: int
