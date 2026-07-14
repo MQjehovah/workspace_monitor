@@ -2,16 +2,13 @@
   <div class="dashboard">
     <header class="nav-header">
       <div class="nav-title">
-        <h1>重大项目全景监控看板</h1>
-        <span class="version">V2.0</span>
+        <h1>特殊专项监控看板</h1>
+        <span class="version special-version">特殊</span>
       </div>
       <div class="nav-actions">
         <span class="update-time">数据更新：{{ currentTime }}</span>
-        <router-link to="/member-performance" class="btn-member-perf">成员专项绩效</router-link>
-        <router-link to="/goal-management" class="btn-goal-mgmt">专项目标</router-link>
-        <router-link to="/key-projects" class="btn-key-project">关键项目</router-link>
-        <router-link to="/admin" class="btn-admin">后台管理</router-link>
-        <button class="btn-export">导出报告</button>
+        <router-link to="/special-admin" class="btn-admin">特殊专项管理</router-link>
+        <button @click="refresh" class="btn-refresh">手动刷新</button>
       </div>
     </header>
 
@@ -21,7 +18,7 @@
       <div class="kpi-grid">
         <div class="kpi-card">
           <div class="kpi-header">
-            <span>重大项目总数</span>
+            <span>特殊专项总数</span>
             <div class="kpi-icon">📁</div>
           </div>
           <div class="kpi-value">{{ stats?.total_projects || 0 }}</div>
@@ -62,7 +59,7 @@
 
     <!-- Project Table -->
     <section class="table-section">
-      <h2 class="section-title">重大项目明细</h2>
+      <h2 class="section-title">特殊专项明细</h2>
       <table class="project-table">
         <thead>
           <tr>
@@ -90,7 +87,7 @@
               <span class="status-badge" :class="project.status">{{ getStatusText(project.status) }}</span>
             </td>
             <td>{{ project.owner }}</td>
-            <td><router-link :to="'/project/' + project.id" class="btn-detail">详情</router-link></td>
+            <td><router-link :to="'/special-project/' + project.id" class="btn-detail">详情</router-link></td>
           </tr>
         </tbody>
       </table>
@@ -100,17 +97,16 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, computed } from 'vue'
-import { useProjectStore } from '@/stores/project'
+import { ref, onMounted, computed } from 'vue'
+import { getSpecialProjects } from '@/api'
+import type { Project } from '@/api'
 import dayjs from 'dayjs'
 
-const store = useProjectStore()
-
+const projects = ref<Project[]>([])
 const currentTime = computed(() => dayjs().format('YYYY-MM-DD HH:mm'))
 
 const refresh = async () => {
-  await store.fetchProjects()
-  await store.fetchStats()
+  await fetchSpecialProjects()
 }
 
 const getProgressClass = (progress: number) => {
@@ -124,12 +120,29 @@ const getStatusText = (status: string) => {
   return map[status] || status
 }
 
-const projects = computed(() => store.projects)
-const stats = computed(() => store.stats)
+const stats = computed(() => {
+  if (!projects.value.length) return null
+  const total = projects.value.length
+  const avgProgress = projects.value.reduce((sum, p) => sum + (p.progress || 0), 0) / total
+  const avgScore = projects.value.reduce((sum, p) => sum + (p.score || 0), 0) / total
+  const riskCount = projects.value.filter(p => p.status === 'risk').length
+  return {
+    total_projects: total,
+    avg_progress: avgProgress,
+    avg_score: avgScore,
+    risk_count: riskCount,
+    achieved_teams: 0,
+    total_teams: 0
+  }
+})
+
+const fetchSpecialProjects = async () => {
+  const res = await getSpecialProjects()
+  projects.value = res.data
+}
 
 onMounted(() => {
-  store.fetchProjects()
-  store.fetchStats()
+  fetchSpecialProjects()
 })
 </script>
 
@@ -161,6 +174,11 @@ onMounted(() => {
   font-size: 12px;
 }
 
+.special-version {
+  background: #8b5cf6;
+  color: white;
+}
+
 .nav-actions {
   display: flex;
   align-items: center;
@@ -172,8 +190,7 @@ onMounted(() => {
   font-size: 12px;
 }
 
-.btn-key-project, .btn-export, .btn-close, .btn-admin,
-.btn-member-perf, .btn-goal-mgmt {
+.btn-refresh, .btn-admin {
   padding: 8px 16px;
   border-radius: 6px;
   border: none;
@@ -182,7 +199,7 @@ onMounted(() => {
   text-decoration: none;
 }
 
-.btn-key-project {
+.btn-refresh {
   background: var(--bg-card);
   color: var(--accent-blue);
 }
@@ -192,27 +209,7 @@ onMounted(() => {
   color: white;
 }
 
-.btn-export {
-  background: var(--accent-blue);
-  color: white;
-}
-
-.btn-member-perf {
-  background: #1A3A2F;
-  color: var(--accent-green);
-}
-
-.btn-goal-mgmt {
-  background: #2D1B3E;
-  color: var(--accent-purple);
-}
-
-.btn-close {
-  background: var(--border-subtle);
-  color: var(--text-primary);
-}
-
-.kpi-section, .table-section, .goal-section {
+.kpi-section, .table-section {
   margin-top: 24px;
 }
 

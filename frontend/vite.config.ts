@@ -13,8 +13,13 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:8004',
+        target: 'http://localhost:8003',
         changeOrigin: true
+      },
+      '^/project/uploads': {
+        target: 'http://localhost:8003',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/project/, '')
       }
     }
   }

@@ -7,7 +7,7 @@ import json
 import os
 import uuid
 from app.database import get_db, engine, Base, DATA_DIR
-from app.models import Project, Goal, GoalScore, Milestone, MonthlyReport, SubTeam, SubTeamMember, SubTeamRating, MemberMonthlyScore
+from app.models import Project, Goal, GoalScore, Milestone, MonthlyReport, SubTeam, SubTeamMember, SubTeamRating, MemberMonthlyScore, KeyProject
 from pydantic import BaseModel
 from typing import Optional, Union
 from app.schemas import (
@@ -22,6 +22,7 @@ from app.schemas import (
     MemberMonthlyScoreCreate, MemberMonthlyScoreOut, MemberMonthlyScoreUpdate,
     MemberPerformanceResponse, BatchImportResult,
     GoalTargetUpdate, GoalDefinitionUpdate, GoalManagementResponse,
+    KeyProjectCreate, KeyProjectUpdate, KeyProjectOut, KeyProjectWithGoals,
 )
 from app.websocket import manager
 
@@ -88,6 +89,40 @@ with engine.connect() as conn:
         CREATE UNIQUE INDEX IF NOT EXISTS uq_member_score
         ON member_monthly_scores (sub_team_member_id, year, month)
     """))
+
+    # 添加 special 字段
+    project_result = conn.execute(text("PRAGMA table_info(projects)"))
+    project_cols = [row[1] for row in project_result.fetchall()]
+    if "special" not in project_cols:
+        conn.execute(text("ALTER TABLE projects ADD COLUMN special INTEGER DEFAULT 0"))
+
+    # 创建 key_projects 表
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS key_projects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name VARCHAR(100) NOT NULL,
+            owner VARCHAR(50),
+            start_date DATE,
+            end_date DATE,
+            progress VARCHAR(20) DEFAULT '在行',
+            status VARCHAR(20) DEFAULT 'healthy',
+            created_at DATE DEFAULT CURRENT_DATE
+        )
+    """))
+
+    # goals 表新增 key_project_id 和 gap_analysis
+    goal_result = conn.execute(text("PRAGMA table_info(goals)"))
+    goal_cols = [row[1] for row in goal_result.fetchall()]
+    if "key_project_id" not in goal_cols:
+        conn.execute(text("ALTER TABLE goals ADD COLUMN key_project_id INTEGER REFERENCES key_projects(id)"))
+    if "gap_analysis" not in goal_cols:
+        conn.execute(text("ALTER TABLE goals ADD COLUMN gap_analysis VARCHAR(500)"))
+
+    # goal_scores 表新增 gap_analysis
+    score_result2 = conn.execute(text("PRAGMA table_info(goal_scores)"))
+    score_cols2 = [row[1] for row in score_result2.fetchall()]
+    if "gap_analysis" not in score_cols2:
+        conn.execute(text("ALTER TABLE goal_scores ADD COLUMN gap_analysis VARCHAR(500)"))
 
     conn.commit()
 # === 迁移结束 ===
@@ -218,21 +253,18 @@ def build_goal_with_latest(goal: Goal) -> GoalWithLatestScore:
     latest_monthly_rate = None
     latest_yearly_value = None
     latest_yearly_rate = None
+    latest_gap_analysis = None
     if goal.scores:
-        # 过滤出有打分数据（score > 0）的记录，按年月降序排列
         valid_scores = [s for s in goal.scores if s.score is not None and s.score > 0]
-        # 按年月降序排序，确保取到最近的有数据月份
         valid_scores.sort(key=lambda s: (s.year, s.month), reverse=True)
-        
-        # 1. 取有打分数据的最新记录（直接取最新月份，不优先找有monthly_rate的）
+
         business_record = None
         if valid_scores:
             business_record = valid_scores[0]
-        
-        # 如果没有有分记录，回退到所有记录的第一条（兼容旧数据）
+
         if not business_record and goal.scores:
             business_record = goal.scores[0]
-            
+
         if business_record:
             s = business_record
             latest_score = s.score
@@ -242,28 +274,30 @@ def build_goal_with_latest(goal: Goal) -> GoalWithLatestScore:
             latest_monthly_value = s.monthly_value
             latest_monthly_actual = s.actual_value
             latest_monthly_rate = s.monthly_rate
-        
-        # 2. 单独查找有年度数据的记录（yearly_value 或 yearly_rate 有值），优先从有分记录中找
+            latest_gap_analysis = s.gap_analysis
+
         yearly_record = None
         if valid_scores:
             for s in valid_scores:
                 if s.yearly_value is not None or s.yearly_rate is not None:
                     yearly_record = s
                     break
-        # 如果没找到，从所有记录中找
         if not yearly_record:
             for s in goal.scores:
                 if s.yearly_value is not None or s.yearly_rate is not None:
                     yearly_record = s
                     break
-        
+
         if yearly_record:
             latest_yearly_value = yearly_record.yearly_value
             latest_yearly_rate = yearly_record.yearly_rate
-            
+
     return GoalWithLatestScore(
         id=goal.id,
         name=goal.name,
+        project_id=goal.project_id,
+        project_name=goal.project.name if goal.project else None,
+        key_project_id=goal.key_project_id,
         description=goal.description,
         latest_score=latest_score,
         latest_year=latest_year,
@@ -277,6 +311,7 @@ def build_goal_with_latest(goal: Goal) -> GoalWithLatestScore:
         latest_monthly_rate=latest_monthly_rate,
         latest_yearly_value=latest_yearly_value,
         latest_yearly_rate=latest_yearly_rate,
+        latest_gap_analysis=latest_gap_analysis,
     )
 
 
@@ -356,7 +391,12 @@ async def broadcast_update(message: dict):
 
 @app.get("/api/projects", response_model=list[ProjectSchema])
 async def list_projects(db: Session = Depends(get_db)):
-    return db.query(Project).all()
+    return db.query(Project).filter(Project.special == 0).all()
+
+
+@app.get("/api/special-projects", response_model=list[ProjectSchema])
+async def list_special_projects(db: Session = Depends(get_db)):
+    return db.query(Project).filter(Project.special == 1).all()
 
 
 @app.get("/api/projects/{project_id}", response_model=ProjectWithGoals)
@@ -371,7 +411,7 @@ async def get_project(project_id: int, db: Session = Depends(get_db)):
 
 @app.get("/api/stats", response_model=StatsResponse)
 async def get_stats(db: Session = Depends(get_db)):
-    projects = db.query(Project).all()
+    projects = db.query(Project).filter(Project.special == 0).all()
     if not projects:
         return {"total_projects": 0, "avg_progress": 0, "avg_achievement": 0, "avg_score": 0, "risk_count": 0, "achieved_teams": 0, "total_teams": 0}
 
@@ -709,7 +749,126 @@ async def upsert_goal_score(goal_id: int, score_data: GoalScoreCreate, db: Sessi
         result = new_score
 
     recompute_project_score(db, goal.project_id)
+    # 如果有 key_project_id，更新关键项目状态
+    if goal.key_project_id:
+        recompute_key_project_score(db, goal.key_project_id)
     return result
+
+
+def recompute_key_project_score(db: Session, key_project_id: int):
+    goals = db.query(Goal).filter(Goal.key_project_id == key_project_id).all()
+    kp = db.query(KeyProject).filter(KeyProject.id == key_project_id).first()
+    if not kp:
+        return
+    all_scores = db.query(GoalScore).filter(
+        GoalScore.goal_id.in_([g.id for g in goals]),
+        GoalScore.score > 0
+    ).order_by(GoalScore.year.desc(), GoalScore.month.desc()).all()
+    if not all_scores:
+        kp.status = "healthy"
+        db.commit()
+        return
+    latest_year = all_scores[0].year
+    latest_month = all_scores[0].month
+    current_month_scores = [s for s in all_scores if s.year == latest_year and s.month == latest_month]
+    if current_month_scores:
+        avg = round(sum(s.score for s in current_month_scores) / len(current_month_scores), 1)
+    else:
+        avg = 0.0
+    if avg >= 80:
+        kp.status = "healthy"
+    elif avg >= 60:
+        kp.status = "warning"
+    else:
+        kp.status = "risk"
+    db.commit()
+
+
+def compute_key_project_score(db: Session, key_project_id: int) -> Optional[float]:
+    """计算关键项目最新月份的平均得分（不写库），无数据返回 None"""
+    goals = db.query(Goal).filter(Goal.key_project_id == key_project_id).all()
+    if not goals:
+        return None
+    all_scores = db.query(GoalScore).filter(
+        GoalScore.goal_id.in_([g.id for g in goals]),
+        GoalScore.score > 0
+    ).order_by(GoalScore.year.desc(), GoalScore.month.desc()).all()
+    if not all_scores:
+        return None
+    latest_year = all_scores[0].year
+    latest_month = all_scores[0].month
+    current_month_scores = [s for s in all_scores if s.year == latest_year and s.month == latest_month]
+    if current_month_scores:
+        return round(sum(s.score for s in current_month_scores) / len(current_month_scores), 1)
+    return None
+
+
+@app.get("/api/key-projects", response_model=list[KeyProjectOut])
+async def list_key_projects(db: Session = Depends(get_db)):
+    kps = db.query(KeyProject).order_by(KeyProject.created_at.desc()).all()
+    result = []
+    for kp in kps:
+        score = compute_key_project_score(db, kp.id)
+        result.append(KeyProjectOut(
+            id=kp.id, name=kp.name, owner=kp.owner,
+            start_date=kp.start_date, end_date=kp.end_date,
+            progress=kp.progress, status=kp.status, score=score,
+        ))
+    return result
+
+
+@app.get("/api/key-projects/{key_project_id}", response_model=KeyProjectWithGoals)
+async def get_key_project(key_project_id: int, db: Session = Depends(get_db)):
+    kp = db.query(KeyProject).filter(KeyProject.id == key_project_id).first()
+    if not kp:
+        raise HTTPException(status_code=404, detail="Key project not found")
+    goals = db.query(Goal).filter(Goal.key_project_id == key_project_id).options(joinedload(Goal.project)).all()
+    goals_data = [build_goal_with_latest(g) for g in goals]
+    score = compute_key_project_score(db, kp.id)
+    return KeyProjectWithGoals(
+        id=kp.id,
+        name=kp.name,
+        owner=kp.owner,
+        start_date=kp.start_date,
+        end_date=kp.end_date,
+        progress=kp.progress,
+        status=kp.status,
+        score=score,
+        goals=goals_data,
+    )
+
+
+@app.post("/api/key-projects", response_model=KeyProjectOut, status_code=201)
+async def create_key_project(data: KeyProjectCreate, db: Session = Depends(get_db)):
+    kp = KeyProject(**data.model_dump())
+    db.add(kp)
+    db.commit()
+    db.refresh(kp)
+    return kp
+
+
+@app.put("/api/key-projects/{key_project_id}", response_model=KeyProjectOut)
+async def update_key_project(key_project_id: int, data: KeyProjectUpdate, db: Session = Depends(get_db)):
+    kp = db.query(KeyProject).filter(KeyProject.id == key_project_id).first()
+    if not kp:
+        raise HTTPException(status_code=404, detail="Key project not found")
+    for key, value in data.model_dump(exclude_unset=True).items():
+        setattr(kp, key, value)
+    db.commit()
+    db.refresh(kp)
+    return kp
+
+
+@app.delete("/api/key-projects/{key_project_id}")
+async def delete_key_project(key_project_id: int, db: Session = Depends(get_db)):
+    kp = db.query(KeyProject).filter(KeyProject.id == key_project_id).first()
+    if not kp:
+        raise HTTPException(status_code=404, detail="Key project not found")
+    # 解除关联的目标
+    db.query(Goal).filter(Goal.key_project_id == key_project_id).update({"key_project_id": None})
+    db.delete(kp)
+    db.commit()
+    return {"status": "deleted"}
 
 
 @app.get("/api/projects/{project_id}/subteams", response_model=list[SubTeamOut])
@@ -1317,6 +1476,19 @@ def _build_member_performance(db: Session, members_query) -> dict:
     ]
 
     rows = []
+    # 预先查询所有相关子团队的最新评级月份，避免 N+1 查询
+    sub_team_ids = set()
+    for member in members_query:
+        sub_team_ids.add(member.sub_team_id)
+    latest_rating_map: dict = {}  # sub_team_id -> {"year":.., "month":..}
+    if sub_team_ids:
+        rating_rows = db.query(SubTeamRating).filter(
+            SubTeamRating.sub_team_id.in_(sub_team_ids)
+        ).order_by(SubTeamRating.year.desc(), SubTeamRating.month.desc()).all()
+        for r in rating_rows:
+            if r.sub_team_id not in latest_rating_map:
+                latest_rating_map[r.sub_team_id] = {"year": r.year, "month": r.month}
+
     for member in members_query:
         # 获取成员所属的子团队和项目信息
         sub_team = db.query(SubTeam).filter(SubTeam.id == member.sub_team_id).first()
@@ -1329,6 +1501,9 @@ def _build_member_performance(db: Session, members_query) -> dict:
             if project:
                 project_name = project.name
             specialty_name = getattr(sub_team, 'specialty_name', '') or ''
+
+        # 该成员所在子团队的最新评级月份
+        latest_rating_month = latest_rating_map.get(member.sub_team_id) if sub_team else None
 
         # 获取该成员的月度得分
         scores_dict = {}
@@ -1374,6 +1549,8 @@ def _build_member_performance(db: Session, members_query) -> dict:
             "project_name": project_name,
             "sub_team_name": sub_team_name,
             "specialty_name": specialty_name,
+            "sub_team_id": member.sub_team_id,
+            "latest_rating_month": latest_rating_month,
             "scores": row_scores,
         })
 
@@ -1396,13 +1573,14 @@ async def get_all_member_performance(
     db: Session = Depends(get_db)
 ):
     """获取所有成员的月度绩效概览"""
-    query = db.query(SubTeamMember)
+    query = db.query(SubTeamMember).join(
+        SubTeam, SubTeamMember.sub_team_id == SubTeam.id
+    ).join(
+        Project, SubTeam.project_id == Project.id
+    ).filter(Project.special == 0)
 
     if project_id is not None:
-        # 筛选指定项目的子团队成员
-        sub_teams = db.query(SubTeam.id).filter(SubTeam.project_id == project_id).all()
-        st_ids = [st.id for st in sub_teams]
-        query = query.filter(SubTeamMember.sub_team_id.in_(st_ids))
+        query = query.filter(SubTeam.project_id == project_id)
 
     members = query.order_by(SubTeamMember.id).all()
     return _build_member_performance(db, members)
@@ -1673,6 +1851,8 @@ async def get_goal_dashboard(
 
     # 获取所有项目名称
     projects_map = {p.id: p.name for p in db.query(Project).all()}
+    # 获取所有关键项目
+    kp_map = {kp.id: kp.name for kp in db.query(KeyProject).all()}
 
     # 确定月份列（4-12月）
     display_months = list(range(4, 13))
@@ -1719,6 +1899,8 @@ async def get_goal_dashboard(
             "project_id": g.project_id,
             "project_name": projects_map.get(g.project_id, ""),
             "goal_name": g.name,
+            "key_project_id": g.key_project_id,
+            "key_project_name": kp_map.get(g.key_project_id, "") if g.key_project_id else "",
             "description": g.description,
             "unit": g.unit or "",
             "yearly_target": g.yearly_target,

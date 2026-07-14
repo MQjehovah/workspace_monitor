@@ -16,6 +16,7 @@ class Project(Base):
     score = Column(Float, default=0.0)
     status = Column(String(20), default="healthy")
     target_date = Column(Date, nullable=True)
+    special = Column(Integer, default=0)
     created_at = Column(Date, default=lambda: datetime.now().date())
 
     goals = relationship("Goal", back_populates="project", cascade="all, delete-orphan", order_by="Goal.id")
@@ -24,11 +25,27 @@ class Project(Base):
     sub_teams = relationship("SubTeam", back_populates="project", cascade="all, delete-orphan", order_by="SubTeam.id")
 
 
+class KeyProject(Base):
+    __tablename__ = "key_projects"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    owner = Column(String(50))
+    start_date = Column(Date, nullable=True)
+    end_date = Column(Date, nullable=True)
+    progress = Column(String(20), default="在行")
+    status = Column(String(20), default="healthy")
+    created_at = Column(Date, default=lambda: datetime.now().date())
+
+    goals = relationship("Goal", back_populates="key_project", order_by="Goal.id")
+
+
 class Goal(Base):
     __tablename__ = "goals"
 
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    key_project_id = Column(Integer, ForeignKey("key_projects.id", ondelete="SET NULL"), nullable=True)
     name = Column(String(200), nullable=False)
     description = Column(String(500))
     monthly_target = Column(String(100), nullable=True, comment="月度目标值")
@@ -37,6 +54,7 @@ class Goal(Base):
     created_at = Column(Date, default=lambda: datetime.now().date())
 
     project = relationship("Project", back_populates="goals")
+    key_project = relationship("KeyProject", back_populates="goals")
     scores = relationship("GoalScore", back_populates="goal", cascade="all, delete-orphan",
                           order_by="desc(GoalScore.year), desc(GoalScore.month)")
 
@@ -56,6 +74,7 @@ class GoalScore(Base):
     monthly_rate = Column(Float, nullable=True, comment="当月完成率(%)")
     yearly_value = Column(String(100), nullable=True, comment="年度累计实际值")
     yearly_rate = Column(Float, nullable=True, comment="年度完成率(%)")
+    gap_analysis = Column(String(500), nullable=True, comment="差距分析")
     created_at = Column(Date, default=lambda: datetime.now().date())
 
     goal = relationship("Goal", back_populates="scores")

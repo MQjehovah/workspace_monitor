@@ -34,14 +34,14 @@ export const useProjectStore = defineStore('project', () => {
     return res.data
   }
 
-  const addGoal = async (projectId: number, name: string, description?: string) => {
-    await createGoal(projectId, { name, description })
+  const addGoal = async (projectId: number, name: string, description?: string, key_project_id?: number | null) => {
+    await createGoal(projectId, { name, description, key_project_id: key_project_id ?? undefined })
     await fetchProjectDetail(projectId)
     await fetchProjects()
     await fetchStats()
   }
 
-  const editGoal = async (goalId: number, projectId: number, data: { name?: string; description?: string; unit?: string }) => {
+  const editGoal = async (goalId: number, projectId: number, data: { name?: string; description?: string; unit?: string; key_project_id?: number | null }) => {
     await updateGoal(goalId, data)
     await fetchProjectDetail(projectId)
   }

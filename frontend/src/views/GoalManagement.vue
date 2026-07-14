@@ -60,6 +60,7 @@
                 <td class="col-sticky col-project" v-else></td>
                 <td class="col-sticky col-goal" v-if="idx === 0 || dashboardData.rows[idx-1].id !== row.id">
                   {{ row.goal_name }}
+                  <span v-if="row.key_project_name" class="key-project-tag">{{ row.key_project_name }}</span>
                   <span v-if="row.description" class="goal-desc-icon" @click.stop="showGoalDesc(row)" title="查看描述">?</span>
                 </td>
                 <td class="col-sticky col-goal" v-else></td>
@@ -383,6 +384,18 @@ onMounted(() => { loadData() })
 </script>
 
 <style scoped>
+/* ===== 关键项目标签 ===== */
+.key-project-tag {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 4px;
+  background: rgba(139, 92, 246, 0.15);
+  color: #a78bfa;
+  font-size: 11px;
+  font-weight: 500;
+  margin-left: 4px;
+}
+
 /* ===== 页面容器 ===== */
 .goal-dashboard-page {
   padding: 16px 20px 32px;

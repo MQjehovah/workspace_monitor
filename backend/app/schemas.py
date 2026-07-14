@@ -15,7 +15,67 @@ class ProjectBase(BaseModel):
 
 
 class ProjectCreate(ProjectBase):
+    special: int = 0
+
+
+class KeyProjectBase(BaseModel):
+    name: str
+    owner: Optional[str] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    progress: str = "在行"
+    status: str = "healthy"
+
+
+class KeyProjectCreate(KeyProjectBase):
     pass
+
+
+class KeyProjectUpdate(BaseModel):
+    name: Optional[str] = None
+    owner: Optional[str] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    progress: Optional[str] = None
+    status: Optional[str] = None
+
+
+class KeyProjectOut(KeyProjectBase):
+    id: int
+    score: Optional[float] = None
+
+    class Config:
+        from_attributes = True
+
+
+class KeyProjectGoal(BaseModel):
+    id: int
+    name: str
+    project_id: int
+    project_name: str = ""
+    description: Optional[str] = None
+    unit: Optional[str] = None
+    monthly_target: Optional[str] = None
+    yearly_target: Optional[str] = None
+    latest_score: Optional[float] = None
+    latest_year: Optional[int] = None
+    latest_month: Optional[int] = None
+    latest_monthly_value: Optional[str] = None
+    latest_monthly_actual: Optional[str] = None
+    latest_monthly_rate: Optional[float] = None
+    latest_yearly_value: Optional[str] = None
+    latest_yearly_rate: Optional[float] = None
+    latest_gap_analysis: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class KeyProjectWithGoals(KeyProjectOut):
+    goals: list[KeyProjectGoal] = []
+
+    class Config:
+        from_attributes = True
 
 
 class ProjectUpdate(BaseModel):
@@ -53,7 +113,7 @@ class GoalBase(BaseModel):
 
 
 class GoalCreate(GoalBase):
-    pass
+    key_project_id: Optional[int] = None
 
 
 class GoalUpdate(BaseModel):
@@ -62,6 +122,7 @@ class GoalUpdate(BaseModel):
     monthly_target: Optional[str] = None
     yearly_target: Optional[str] = None
     unit: Optional[str] = None
+    key_project_id: Optional[int] = None
 
 
 class GoalScoreBase(BaseModel):
@@ -74,6 +135,7 @@ class GoalScoreBase(BaseModel):
     monthly_rate: Optional[float] = None
     yearly_value: Optional[str] = None
     yearly_rate: Optional[float] = None
+    gap_analysis: Optional[str] = None
 
 
 class GoalScoreCreate(GoalScoreBase):
@@ -100,6 +162,9 @@ class GoalOut(GoalBase):
 class GoalWithLatestScore(BaseModel):
     id: int
     name: str
+    project_id: int = 0
+    project_name: Optional[str] = None
+    key_project_id: Optional[int] = None
     description: Optional[str] = None
     monthly_target: Optional[str] = None
     yearly_target: Optional[str] = None
@@ -108,11 +173,12 @@ class GoalWithLatestScore(BaseModel):
     latest_year: Optional[int] = None
     latest_month: Optional[int] = None
     latest_comment: Optional[str] = None
-    latest_monthly_value: Optional[str] = None  # 月度目标值
-    latest_monthly_actual: Optional[str] = None  # 月度实际值
+    latest_monthly_value: Optional[str] = None
+    latest_monthly_actual: Optional[str] = None
     latest_monthly_rate: Optional[float] = None
     latest_yearly_value: Optional[str] = None
     latest_yearly_rate: Optional[float] = None
+    latest_gap_analysis: Optional[str] = None
 
 
 class MilestoneBase(BaseModel):

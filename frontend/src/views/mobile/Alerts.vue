@@ -48,6 +48,10 @@
         <span class="nav-icon">🎯</span>
         <span>目标</span>
       </router-link>
+      <router-link to="/mobile/key-projects" class="nav-item">
+        <span class="nav-icon">🔑</span>
+        <span>关键项目</span>
+      </router-link>
     </nav>
   </div>
 </template>
@@ -187,7 +191,7 @@ const alerts = ref([
   margin: 0 auto;
   display: flex;
   justify-content: space-around;
-  padding: 12px 16px;
+  padding: 10px 8px;
   background: var(--bg-secondary);
   border-top: 1px solid var(--border-subtle);
 }
@@ -196,10 +200,10 @@ const alerts = ref([
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   color: var(--text-muted);
   text-decoration: none;
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .nav-item.router-link-exact-active {
@@ -207,6 +211,6 @@ const alerts = ref([
 }
 
 .nav-icon {
-  font-size: 22px;
+  font-size: 20px;
 }
 </style>

@@ -2,34 +2,34 @@
   <div class="admin">
     <header class="admin-header">
       <div class="header-left">
-        <router-link to="/" class="back-link">&larr; 返回看板</router-link>
-        <h1>专项目标管理</h1>
+        <router-link to="/special-dashboard" class="back-link">&larr; 返回看板</router-link>
+        <h1>特殊专项管理</h1>
       </div>
       <div class="header-right">
-        <button class="btn-primary btn-sm-header" @click="openAddProject">+ 新增专项</button>
+        <button class="btn-sm-header btn-primary" @click="openAddProject">+ 新增特殊专项</button>
         <button v-if="selectedProjectId" class="btn-sm-header btn-edit-header" @click="openEditProject">编辑专项</button>
         <button v-if="selectedProjectId" class="btn-sm-header btn-danger-header" @click="handleDeleteProject">删除专项</button>
         <select v-model="selectedProjectId" class="project-select" @change="loadGoals">
-          <option value="">选择专项</option>
+          <option value="">选择特殊专项</option>
           <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
         </select>
       </div>
     </header>
 
     <div v-if="!selectedProjectId" class="empty-state">
-      <p>请从右上角选择一个专项进行管理</p>
+      <p>请从右上角选择一个特殊专项进行管理</p>
     </div>
 
     <div v-else class="admin-content">
       <div class="toolbar">
         <div class="toolbar-left">
-          <h2>{{ currentProject?.name }}</h2>
+          <h2>{{ currentProject?.name }}<span class="special-badge">特殊专项</span></h2>
           <span class="toolbar-info">综合得分：<strong>{{ currentProject?.score?.toFixed(1) }}</strong></span>
           <div class="progress-setter">
             <label>进度设定</label>
-            <div class="progress-input-row">
+            <div class="score-slider">
               <input type="range" class="slider" min="0" max="100" v-model.number="progressValue" @change="saveProgress" />
-              <span class="progress-num">{{ progressValue }}%</span>
+              <span class="slider-val">{{ progressValue }}%</span>
             </div>
           </div>
         </div>
@@ -49,7 +49,6 @@
         </div>
       </div>
 
-      <!-- Goals Tab -->
       <template v-if="adminTab === 'goals'">
         <table class="goal-table" v-if="goals.length > 0">
         <thead>
@@ -104,7 +103,6 @@
       <div v-else class="empty-state">暂无目标，请点击「添加目标」</div>
       </template>
 
-      <!-- Milestones Tab -->
       <template v-if="adminTab === 'milestones'">
         <table class="goal-table" v-if="milestones.length > 0">
           <thead>
@@ -139,7 +137,6 @@
         <div v-else class="empty-state">暂无里程碑，请点击「添加里程碑」</div>
       </template>
 
-      <!-- Reports Tab -->
       <template v-if="adminTab === 'reports'">
         <table class="goal-table" v-if="reports.length > 0">
           <thead>
@@ -167,7 +164,6 @@
         <div v-else class="empty-state">暂无月度报告，请点击「新增月报」</div>
       </template>
 
-      <!-- SubTeams Tab -->
       <template v-if="adminTab === 'subteams'">
         <div v-if="subTeams.length > 0" class="subteams-container">
           <div v-for="st in subTeams" :key="st.id" class="subteam-card">
@@ -199,12 +195,7 @@
                   </div>
                 </div>
               </div>
-              <div v-else class="no-members">暂无成员</div>
-              <div v-if="st.ratings.length > 0" class="subteam-latest-rating">
-                <span class="rating-label">最新评级：</span>
-                <span class="rating-badge" :class="getRatingClass(st.ratings[0].rating)">{{ st.ratings[0].rating }}</span>
-                <span class="rating-date">{{ st.ratings[0].year }}/{{ st.ratings[0].month }}</span>
-              </div>
+              <div v-else class="empty-members">暂无成员，请点击「添加成员」</div>
             </div>
           </div>
         </div>
@@ -212,367 +203,382 @@
       </template>
     </div>
 
-    <!-- Project Add/Edit Modal -->
-    <div v-if="showProjectModal" class="modal-mask" @click.self="showProjectModal = false">
-      <div class="modal-box">
-        <h3>{{ editingProjectId ? '编辑专项' : '新增专项' }}</h3>
-        <div class="form-group">
-          <label>专项名称</label>
-          <input v-model="projectForm.name" class="form-input" placeholder="请输入专项名称" />
-        </div>
-        <div class="form-row">
-          <div class="form-group half">
-            <label>负责人</label>
-            <input v-model="projectForm.owner" class="form-input" placeholder="负责人姓名" />
+    <transition name="modal">
+      <div v-if="showGoalModal" class="modal-mask" @click.self="showGoalModal = false">
+        <div class="modal-box">
+          <h3>{{ editingGoalId ? '编辑目标' : '添加目标' }}</h3>
+          <div class="form-group">
+            <label>目标名称</label>
+            <input v-model="goalForm.name" class="form-input" placeholder="目标名称" />
           </div>
-          <div class="form-group half">
-            <label>所属部门</label>
-            <input v-model="projectForm.department" class="form-input" placeholder="部门名称" />
+          <div class="form-group">
+            <label>目标描述（可选）</label>
+            <textarea v-model="goalForm.description" class="form-input form-textarea" placeholder="目标描述"></textarea>
           </div>
-        </div>
-        <div class="form-group">
-          <label>目标日期</label>
-          <input v-model="projectForm.target_date" type="date" class="form-input" />
-        </div>
-        <div class="modal-footer">
-          <button class="btn-secondary" @click="showProjectModal = false">取消</button>
-          <button class="btn-primary" @click="handleSaveProject" :disabled="!projectForm.name.trim()">保存</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Milestone Add/Edit Modal -->
-    <div v-if="showMsModal" class="modal-mask" @click.self="showMsModal = false">
-      <div class="modal-box">
-        <h3>{{ editingMsId ? '编辑里程碑' : '添加里程碑' }}</h3>
-        <div class="form-group">
-          <label>里程碑名称</label>
-          <input v-model="msForm.event" class="form-input" placeholder="里程碑事件描述" />
-        </div>
-        <div class="form-group">
-          <label>分组名称（可选）</label>
-          <input v-model="msForm.group_name" class="form-input" placeholder="关键里程碑分组" />
-        </div>
-        <div class="form-group">
-          <label>截止日期</label>
-          <input v-model="msForm.due_date" type="date" class="form-input" />
-        </div>
-        <div class="modal-footer">
-          <button class="btn-secondary" @click="showMsModal = false">取消</button>
-          <button class="btn-primary" @click="handleSaveMilestone" :disabled="!msForm.event.trim()">保存</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Add / Edit Goal Modal -->
-    <div v-if="showGoalModal" class="modal-mask" @click.self="showGoalModal = false">
-      <div class="modal-box">
-        <h3>{{ editingGoalId ? '编辑目标' : '添加目标' }}</h3>
-        <div class="form-group">
-          <label>目标名称</label>
-          <input v-model="goalForm.name" class="form-input" placeholder="请输入目标名称" />
-        </div>
-        <div class="form-group">
-          <label>描述（可选）</label>
-          <input v-model="goalForm.description" class="form-input" placeholder="可选" />
-        </div>
-        <div class="form-group">
-          <label>单位（可选）</label>
-          <input v-model="goalForm.unit" class="form-input" placeholder="如：个、万元、次、%" />
-        </div>
-        <div class="form-group">
-          <label>关键项目（可选）</label>
-          <select v-model.number="goalForm.key_project_id" class="form-input">
-            <option :value="null">-- 不关联 --</option>
-            <option v-for="kp in keyProjects" :key="kp.id" :value="kp.id">{{ kp.name }}</option>
-          </select>
-        </div>
-        <div class="modal-footer">
-          <button class="btn-secondary" @click="showGoalModal = false">取消</button>
-          <button class="btn-primary" @click="handleSaveGoal" :disabled="!goalForm.name.trim()">保存</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Goal Description Modal -->
-    <div v-if="showDescModal" class="modal-mask" @click.self="showDescModal = false">
-      <div class="modal-box" style="max-width:460px;">
-        <h3>{{ descGoalName }}</h3>
-        <p style="line-height:1.7;color:#555;white-space:pre-wrap;">{{ descGoalContent }}</p>
-        <div class="modal-footer">
-          <button class="btn-primary" @click="showDescModal = false">关闭</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Score Modal -->
-    <div v-if="scoringGoal" class="modal-mask" @click.self="scoringGoal = null">
-      <div class="modal-box score-modal-wide">
-        <h3>为「{{ scoringGoal.name }}」打分</h3>
-        <div class="form-row">
-          <div class="form-group half">
-            <label>年份</label>
-            <select v-model.number="scoreForm.year" class="form-input">
-              <option v-for="y in [2025, 2026, 2027]" :key="y" :value="y">{{ y }}</option>
+          <div class="form-group">
+            <label>关键项目（可选）</label>
+            <select v-model.number="goalForm.key_project_id" class="form-input">
+              <option :value="null">-- 不关联 --</option>
+              <option v-for="kp in keyProjects" :key="kp.id" :value="kp.id">{{ kp.name }}</option>
             </select>
           </div>
-          <div class="form-group half">
-            <label>月份</label>
-            <select v-model.number="scoreForm.month" class="form-input">
-              <option v-for="m in 12" :key="m" :value="m">{{ m }}月</option>
-            </select>
+          <div class="modal-footer">
+            <button class="btn-secondary" @click="showGoalModal = false">取消</button>
+            <button class="btn-primary" @click="handleSaveGoal">{{ editingGoalId ? '保存' : '添加' }}</button>
           </div>
-        </div>
-        <div class="form-group">
-          <label>评分（0-100）</label>
-          <input v-model.number="scoreForm.score" type="number" min="0" max="100" step="0.1" class="form-input" />
-          <div class="score-slider">
-            <input type="range" v-model.number="scoreForm.score" min="0" max="100" step="1" class="slider" />
-            <span class="slider-val">{{ scoreForm.score }}</span>
-          </div>
-        </div>
-        <!-- 实际值/完成率字段已移除，统一在目标看板中维护 -->
-        <div class="form-group">
-          <label>备注</label>
-          <textarea v-model="scoreForm.comment" class="form-input form-textarea" rows="3" placeholder="评语或说明"></textarea>
-        </div>
-        <div class="modal-footer">
-          <button class="btn-secondary" @click="scoringGoal = null">取消</button>
-          <button class="btn-primary" @click="handleScore">提交评分</button>
         </div>
       </div>
-    </div>
+    </transition>
 
-    <!-- Report Add/Edit Modal -->
-    <div v-if="showReportModal" class="modal-mask" @click.self="showReportModal = false">
-      <div class="modal-box wide tall">
-        <h3>{{ editingReportId ? '编辑月度报告' : '新增月度报告' }}</h3>
-        <div class="form-row" v-if="!editingReportId">
-          <div class="form-group half">
-            <label>年份</label>
-            <select v-model.number="reportForm.year" class="form-input">
-              <option v-for="y in [2025, 2026, 2027]" :key="y" :value="y">{{ y }}</option>
-            </select>
-          </div>
-          <div class="form-group half">
-            <label>月份</label>
-            <select v-model.number="reportForm.month" class="form-input">
-              <option v-for="m in 12" :key="m" :value="m">{{ m }}月</option>
-            </select>
+    <transition name="modal">
+      <div v-if="showDescModal" class="modal-mask" @click.self="showDescModal = false">
+        <div class="modal-box">
+          <h3>{{ descGoalName }}</h3>
+          <div class="md-preview">{{ descGoalContent }}</div>
+          <div class="modal-footer">
+            <button class="btn-primary" @click="showDescModal = false">关闭</button>
           </div>
         </div>
-        <div v-else class="report-editing-hint">
-          {{ reportForm.year }}年{{ reportForm.month }}月
-        </div>
+      </div>
+    </transition>
 
-        <!-- PDF Upload Section -->
-        <div class="form-group">
-          <label>PDF 附件</label>
-          <div v-if="reportPdfPath" class="pdf-info">
-            <span class="pdf-badge">PDF</span>
-            <span class="pdf-name">{{ reportPdfName }}</span>
-            <button class="btn-sm btn-danger" @click="handleRemovePdf" :disabled="reportUploading">删除</button>
-          </div>
-          <div class="pdf-upload-area">
-            <input type="file" ref="pdfInputRef" accept=".pdf" @change="handlePdfSelect" class="pdf-file-input" />
-            <button class="btn-primary pdf-upload-btn" @click="($refs.pdfInputRef as HTMLInputElement)?.click()" :disabled="reportUploading">
-              {{ reportUploading ? '上传中...' : '选择 PDF 文件' }}
-            </button>
-            <span v-if="reportPendingPdf" class="pdf-pending-name">{{ reportPendingPdf.name }}</span>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <div class="report-editor-header">
-            <label>报告内容（Markdown 格式）</label>
-            <div class="editor-toggle">
-              <button class="toggle-btn" :class="{ active: !reportPreview }" @click="reportPreview = false">编辑</button>
-              <button class="toggle-btn" :class="{ active: reportPreview }" @click="reportPreview = true">预览</button>
+    <transition name="modal">
+      <div v-if="scoringGoal" class="modal-mask" @click.self="scoringGoal = null">
+        <div class="modal-box wide">
+          <h3>评分：{{ scoringGoal.name }}</h3>
+          <div class="form-row">
+            <div class="form-group half">
+              <label>年份</label>
+              <select v-model="scoreForm.year" class="form-input">
+                <option v-for="y in [2024, 2025, 2026, 2027]" :key="y" :value="y">{{ y }}</option>
+              </select>
+            </div>
+            <div class="form-group half">
+              <label>月份</label>
+              <select v-model="scoreForm.month" class="form-input">
+                <option v-for="m in 12" :key="m" :value="m">{{ m }}</option>
+              </select>
             </div>
           </div>
-          <textarea v-if="!reportPreview" v-model="reportForm.content" class="form-input form-textarea md-editor" rows="16" placeholder="请输入 Markdown 格式的月度报告内容&#10;&#10;支持标题、列表、表格、加粗等格式"></textarea>
-          <div v-else class="md-preview" v-html="renderMarkdown(reportForm.content)"></div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn-secondary" @click="showReportModal = false" :disabled="reportSaving">取消</button>
-          <button class="btn-primary" @click="handleSaveReport" :disabled="reportSaving">
-            {{ reportSaving ? (reportUploading ? '正在上传 PDF...' : '保存中...') : '保存' }}
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- History Modal -->
-    <div v-if="historyGoal" class="modal-mask" @click.self="historyGoal = null">
-      <div class="modal-box wide">
-        <h3>「{{ historyGoal.name }}」评分历史</h3>
-        <table v-if="historyScores.length > 0" class="history-table">
-          <thead>
-            <tr>
-              <th>年月</th>
-              <th>评分</th>
-              <th style="width:90px">当月实际</th>
-              <th style="width:80px">月完成率</th>
-              <th style="width:90px">年度实际</th>
-              <th style="width:80px">年完成率</th>
-              <th>备注</th>
-              <th style="width: 60px">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="s in historyScores" :key="s.id">
-              <td>{{ s.year }}年{{ s.month }}月</td>
-              <td>
-                <span class="score-tag" :class="scoreTagClass(s.score)">{{ s.score.toFixed(1) }}</span>
-              </td>
-              <td class="muted">{{ s.actual_value != null ? s.actual_value : '-' }}</td>
-              <td class="muted">{{ s.monthly_rate != null ? s.monthly_rate.toFixed(1) + '%' : '-' }}</td>
-              <td class="muted">{{ s.yearly_value != null ? s.yearly_value : '-' }}</td>
-              <td class="muted">{{ s.yearly_rate != null ? s.yearly_rate.toFixed(1) + '%' : '-' }}</td>
-              <td class="muted" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ s.comment || '-' }}</td>
-              <td>
-                <button class="btn-sm btn-danger" @click="handleDeleteScore(s.id)">删除</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <div v-else class="empty-state">暂无评分记录</div>
-        <div class="modal-footer">
-          <button class="btn-secondary" @click="historyGoal = null">关闭</button>
+          <div class="form-group">
+            <label>评分</label>
+            <div class="score-slider">
+              <input type="range" class="slider" min="0" max="100" v-model.number="scoreForm.score" />
+              <span class="slider-val">{{ scoreForm.score }}</span>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group half">
+              <label>当月目标值</label>
+              <input type="text" v-model="scoreForm.monthly_value" class="form-input" placeholder="如：5h" />
+            </div>
+            <div class="form-group half">
+              <label>当月实际值</label>
+              <input type="text" v-model="scoreForm.actual_value" class="form-input" placeholder="如：3.5h" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group half">
+              <label>月度完成率 (%)</label>
+              <input type="number" v-model.number="scoreForm.monthly_rate" class="form-input" min="0" max="100" />
+            </div>
+            <div class="form-group half">
+              <label>年度完成率 (%)</label>
+              <input type="number" v-model.number="scoreForm.yearly_rate" class="form-input" min="0" max="100" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label>年度实际值</label>
+            <input type="text" v-model="scoreForm.yearly_value" class="form-input" placeholder="年度累计" />
+          </div>
+          <div class="form-group">
+            <label>备注</label>
+            <textarea v-model="scoreForm.comment" class="form-input form-textarea" placeholder="备注说明"></textarea>
+          </div>
+          <div class="modal-footer">
+            <button class="btn-secondary" @click="scoringGoal = null">取消</button>
+            <button class="btn-primary" @click="handleScoreGoal">保存评分</button>
+          </div>
         </div>
       </div>
-    </div>
+    </transition>
 
-    <!-- SubTeam Add/Edit Modal -->
-    <div v-if="showSubTeamModal" class="modal-mask" @click.self="showSubTeamModal = false">
-      <div class="modal-box">
-        <h3>{{ editingSubTeamId ? '编辑子团队' : '添加子团队' }}</h3>
-        <div class="form-group">
-          <label>团队名称</label>
-          <input v-model="subTeamForm.name" class="form-input" placeholder="请输入子团队名称" />
-        </div>
-        <div class="form-group">
-          <label>负责人</label>
-          <input v-model="subTeamForm.leader" class="form-input" placeholder="负责人姓名（可选）" />
-        </div>
-        <div v-if="!editingSubTeamId" class="form-group">
-          <label>初始成员（每行一个姓名，可选填角色如：张三-开发）</label>
-          <textarea v-model="subTeamForm.membersText" class="form-input form-textarea" rows="4" placeholder="张三&#10;李四-测试&#10;王五-产品"></textarea>
-        </div>
-        <div class="modal-footer">
-          <button class="btn-secondary" @click="showSubTeamModal = false">取消</button>
-          <button class="btn-primary" @click="handleSaveSubTeam" :disabled="!subTeamForm.name.trim()">保存</button>
+    <transition name="modal">
+      <div v-if="historyGoal" class="modal-mask" @click.self="historyGoal = null">
+        <div class="modal-box wide tall">
+          <h3>评分历史：{{ historyGoal.name }}</h3>
+          <table class="history-table" v-if="historyScores.length > 0">
+            <thead>
+              <tr>
+                <th>年月</th>
+                <th>评分</th>
+                <th>月度目标</th>
+                <th>月度实际</th>
+                <th>月完成率</th>
+                <th>年度实际</th>
+                <th>年完成率</th>
+                <th>备注</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="s in historyScores" :key="s.id">
+                <td>{{ s.year }}/{{ s.month }}</td>
+                <td class="center">{{ s.score.toFixed(1) }}</td>
+                <td>{{ s.monthly_value || '-' }}</td>
+                <td>{{ s.actual_value || '-' }}</td>
+                <td class="center">{{ s.monthly_rate != null ? s.monthly_rate.toFixed(1) + '%' : '-' }}</td>
+                <td>{{ s.yearly_value || '-' }}</td>
+                <td class="center">{{ s.yearly_rate != null ? s.yearly_rate.toFixed(1) + '%' : '-' }}</td>
+                <td class="muted">{{ s.comment || '-' }}</td>
+                <td><button class="btn-sm btn-danger" @click="handleDeleteScore(s.id)">删除</button></td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-else class="empty-state">暂无评分记录</div>
+          <div class="modal-footer">
+            <button class="btn-primary" @click="historyGoal = null">关闭</button>
+          </div>
         </div>
       </div>
-    </div>
+    </transition>
 
-    <!-- Add Member Modal -->
-    <div v-if="showMemberModal" class="modal-mask" @click.self="showMemberModal = false">
-      <div class="modal-box">
-        <h3>添加成员到「{{ memberTargetTeam?.name }}」</h3>
-        <div class="form-group">
-          <label>成员姓名</label>
-          <input v-model="memberForm.name" class="form-input" placeholder="姓名" />
-        </div>
-        <div class="form-group">
-          <label>角色（可选）</label>
-          <input v-model="memberForm.role" class="form-input" placeholder="如：开发、测试、产品等" />
-        </div>
-        <div class="modal-footer">
-          <button class="btn-secondary" @click="showMemberModal = false">取消</button>
-          <button class="btn-primary" @click="handleSaveMember" :disabled="!memberForm.name.trim()">添加</button>
+    <transition name="modal">
+      <div v-if="showMsModal" class="modal-mask" @click.self="showMsModal = false">
+        <div class="modal-box">
+          <h3>{{ editingMsId ? '编辑里程碑' : '添加里程碑' }}</h3>
+          <div class="form-group">
+            <label>分组名称（可选）</label>
+            <input v-model="msForm.group_name" class="form-input" placeholder="分组名称" />
+          </div>
+          <div class="form-group">
+            <label>事件描述</label>
+            <input v-model="msForm.event" class="form-input" placeholder="事件描述" />
+          </div>
+          <div class="form-group">
+            <label>截止日期</label>
+            <input v-model="msForm.due_date" class="form-input" type="date" placeholder="截止日期" />
+          </div>
+          <div class="modal-footer">
+            <button class="btn-secondary" @click="showMsModal = false">取消</button>
+            <button class="btn-primary" @click="handleSaveMilestone">{{ editingMsId ? '保存' : '添加' }}</button>
+          </div>
         </div>
       </div>
-    </div>
+    </transition>
 
-    <!-- Edit Member Modal -->
-    <div v-if="showEditMemberModal" class="modal-mask" @click.self="showEditMemberModal = false">
-      <div class="modal-box">
-        <h3>编辑成员</h3>
-        <div class="form-group">
-          <label>成员姓名</label>
-          <input v-model="editMemberForm.name" class="form-input" placeholder="姓名" />
-        </div>
-        <div class="form-group">
-          <label>角色（可选）</label>
-          <input v-model="editMemberForm.role" class="form-input" placeholder="如：开发、测试、产品等" />
-        </div>
-        <div class="modal-footer">
-          <button class="btn-secondary" @click="showEditMemberModal = false">取消</button>
-          <button class="btn-primary" @click="handleSaveEditMember" :disabled="!editMemberForm.name.trim()">保存</button>
+    <transition name="modal">
+      <div v-if="showReportModal" class="modal-mask" @click.self="showReportModal = false">
+        <div class="modal-box wide tall">
+          <h3>{{ editingReportId ? '编辑月度报告' : '新增月度报告' }}</h3>
+          <div class="form-row" v-if="!editingReportId">
+            <div class="form-group half">
+              <label>年份</label>
+              <select v-model.number="reportForm.year" class="form-input">
+                <option v-for="y in [2025, 2026, 2027]" :key="y" :value="y">{{ y }}</option>
+              </select>
+            </div>
+            <div class="form-group half">
+              <label>月份</label>
+              <select v-model.number="reportForm.month" class="form-input">
+                <option v-for="m in 12" :key="m" :value="m">{{ m }}月</option>
+              </select>
+            </div>
+          </div>
+          <div v-else class="report-editing-hint">
+            {{ reportForm.year }}年{{ reportForm.month }}月
+          </div>
+          <div class="form-group">
+            <label>PDF 附件</label>
+            <div v-if="reportPdfPath" class="pdf-info">
+              <span class="pdf-badge">PDF</span>
+              <span class="pdf-name">{{ reportPdfName }}</span>
+              <button class="btn-sm btn-danger" @click="handleRemovePdf" :disabled="reportUploading">删除</button>
+            </div>
+            <div class="pdf-upload-area">
+              <input type="file" ref="pdfInputRef" accept=".pdf" @change="handlePdfSelect" class="pdf-file-input" />
+              <button class="btn-primary pdf-upload-btn" @click="($refs.pdfInputRef as HTMLInputElement)?.click()" :disabled="reportUploading">
+                {{ reportUploading ? '上传中...' : '选择 PDF 文件' }}
+              </button>
+              <span v-if="reportPendingPdf" class="pdf-pending-name">{{ reportPendingPdf.name }}</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <div class="report-editor-header">
+              <label>报告内容（Markdown 格式）</label>
+              <div class="editor-toggle">
+                <button class="toggle-btn" :class="{ active: !reportPreview }" @click="reportPreview = false">编辑</button>
+                <button class="toggle-btn" :class="{ active: reportPreview }" @click="reportPreview = true">预览</button>
+              </div>
+            </div>
+            <textarea v-if="!reportPreview" v-model="reportForm.content" class="form-input form-textarea md-editor" rows="16" placeholder="请输入 Markdown 格式的月度报告内容&#10;&#10;支持标题、列表、表格、加粗等格式"></textarea>
+            <div v-else class="md-preview" v-html="renderMarkdown(reportForm.content)"></div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn-secondary" @click="showReportModal = false" :disabled="reportSaving">取消</button>
+            <button class="btn-primary" @click="handleSaveReport" :disabled="reportSaving">
+              {{ reportSaving ? (reportUploading ? '正在上传 PDF...' : '保存中...') : '保存' }}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </transition>
 
-    <!-- SubTeam Rating Modal -->
-    <div v-if="ratingTargetTeam" class="modal-mask" @click.self="ratingTargetTeam = null">
-      <div class="modal-box">
-        <h3>为「{{ ratingTargetTeam.name }}」月度评级</h3>
-        <div class="form-row">
-          <div class="form-group half">
-            <label>年份</label>
-            <select v-model.number="ratingForm.year" class="form-input">
-              <option v-for="y in [2025, 2026, 2027]" :key="y" :value="y">{{ y }}</option>
+    <transition name="modal">
+      <div v-if="showSubTeamModal" class="modal-mask" @click.self="showSubTeamModal = false">
+        <div class="modal-box">
+          <h3>{{ editingSubTeamId ? '编辑子团队' : '添加子团队' }}</h3>
+          <div class="form-group">
+            <label>子团队名称</label>
+            <input v-model="subTeamForm.name" class="form-input" placeholder="子团队名称" />
+          </div>
+          <div class="form-group">
+            <label>负责人（可选）</label>
+            <input v-model="subTeamForm.leader" class="form-input" placeholder="负责人" />
+          </div>
+          <div class="modal-footer">
+            <button class="btn-secondary" @click="showSubTeamModal = false">取消</button>
+            <button class="btn-primary" @click="handleSaveSubTeam">{{ editingSubTeamId ? '保存' : '添加' }}</button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <transition name="modal">
+      <div v-if="showMemberModal" class="modal-mask" @click.self="showMemberModal = false">
+        <div class="modal-box">
+          <h3>添加成员</h3>
+          <div class="form-group">
+            <label>成员姓名</label>
+            <input v-model="memberForm.name" class="form-input" placeholder="成员姓名" />
+          </div>
+          <div class="form-group">
+            <label>角色（可选）</label>
+            <input v-model="memberForm.role" class="form-input" placeholder="角色" />
+          </div>
+          <div class="modal-footer">
+            <button class="btn-secondary" @click="showMemberModal = false">取消</button>
+            <button class="btn-primary" @click="handleAddMember">添加</button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <transition name="modal">
+      <div v-if="showEditMemberModal" class="modal-mask" @click.self="showEditMemberModal = false">
+        <div class="modal-box">
+          <h3>编辑成员</h3>
+          <div class="form-group">
+            <label>成员姓名</label>
+            <input v-model="editMemberForm.name" class="form-input" placeholder="成员姓名" />
+          </div>
+          <div class="form-group">
+            <label>角色（可选）</label>
+            <input v-model="editMemberForm.role" class="form-input" placeholder="角色" />
+          </div>
+          <div class="modal-footer">
+            <button class="btn-secondary" @click="showEditMemberModal = false">取消</button>
+            <button class="btn-primary" @click="handleEditMember">保存</button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <transition name="modal">
+      <div v-if="ratingTargetTeam" class="modal-mask" @click.self="ratingTargetTeam = null">
+        <div class="modal-box">
+          <h3>月度评级：{{ ratingTargetTeam.name }}</h3>
+          <div class="form-row">
+            <div class="form-group half">
+              <label>年份</label>
+              <select v-model="ratingForm.year" class="form-input">
+                <option v-for="y in [2024, 2025, 2026, 2027]" :key="y" :value="y">{{ y }}</option>
+              </select>
+            </div>
+            <div class="form-group half">
+              <label>月份</label>
+              <select v-model="ratingForm.month" class="form-input">
+                <option v-for="m in 12" :key="m" :value="m">{{ m }}</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>评级</label>
+            <select v-model="ratingForm.rating" class="form-input">
+              <option value="达成">达成</option>
+              <option value="未达成">未达成</option>
             </select>
           </div>
-          <div class="form-group half">
-            <label>月份</label>
-            <select v-model.number="ratingForm.month" class="form-input">
-              <option v-for="m in 12" :key="m" :value="m">{{ m }}月</option>
-            </select>
+          <div class="form-group">
+            <label>备注</label>
+            <textarea v-model="ratingForm.comment" class="form-input form-textarea" placeholder="备注说明"></textarea>
+          </div>
+          <div class="modal-footer">
+            <button class="btn-secondary" @click="ratingTargetTeam = null">取消</button>
+            <button class="btn-primary" @click="handleSaveRating">保存评级</button>
           </div>
         </div>
-        <div class="form-group">
-          <label>评级</label>
-          <div class="rating-options">
-            <button v-for="r in ['达成', '未达成']" :key="r"
-              class="rating-option" :class="{ selected: ratingForm.rating === r, [getRatingClass(r)]: true }"
-              @click="ratingForm.rating = r">{{ r }}</button>
+      </div>
+    </transition>
+
+    <transition name="modal">
+      <div v-if="ratingHistoryTeam" class="modal-mask" @click.self="ratingHistoryTeam = null">
+        <div class="modal-box">
+          <h3>评级历史：{{ ratingHistoryTeam.name }}</h3>
+          <table class="history-table" v-if="ratingHistoryData.length > 0">
+            <thead>
+              <tr>
+                <th>年月</th>
+                <th>评级</th>
+                <th>备注</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in ratingHistoryData" :key="r.id">
+                <td>{{ r.year }}/{{ r.month }}</td>
+                <td class="center"><span class="rating-tag" :class="getRatingClass(r.rating)">{{ r.rating }}</span></td>
+                <td class="muted">{{ r.comment || '-' }}</td>
+                <td><button class="btn-sm btn-danger" @click="handleDeleteRating(r.id)">删除</button></td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-else class="empty-state">暂无评级记录</div>
+          <div class="modal-footer">
+            <button class="btn-primary" @click="ratingHistoryTeam = null">关闭</button>
           </div>
         </div>
-        <div class="form-group">
-          <label>备注</label>
-          <textarea v-model="ratingForm.comment" class="form-input form-textarea" rows="3" placeholder="评语或说明"></textarea>
-        </div>
-        <div class="modal-footer">
-          <button class="btn-secondary" @click="ratingTargetTeam = null">取消</button>
-          <button class="btn-primary" @click="handleSaveRating" :disabled="!ratingForm.rating">提交评级</button>
+      </div>
+    </transition>
+
+    <transition name="modal">
+      <div v-if="showProjectModal" class="modal-mask" @click.self="showProjectModal = false">
+        <div class="modal-box">
+          <h3>{{ editingProjectId ? '编辑专项' : '新增特殊专项' }}</h3>
+          <div class="form-group">
+            <label>专项名称</label>
+            <input v-model="projectForm.name" class="form-input" placeholder="专项名称" />
+          </div>
+          <div class="form-group">
+            <label>负责人（可选）</label>
+            <input v-model="projectForm.owner" class="form-input" placeholder="负责人" />
+          </div>
+          <div class="form-group">
+            <label>所属部门（可选）</label>
+            <input v-model="projectForm.department" class="form-input" placeholder="所属部门" />
+          </div>
+          <div class="form-group">
+            <label>目标日期（可选）</label>
+            <input v-model="projectForm.target_date" class="form-input" type="date" placeholder="目标日期" />
+          </div>
+          <div class="modal-footer">
+            <button class="btn-secondary" @click="showProjectModal = false">取消</button>
+            <button class="btn-primary" @click="handleSaveProject">{{ editingProjectId ? '保存' : '创建' }}</button>
+          </div>
         </div>
       </div>
-    </div>
+    </transition>
 
-    <!-- SubTeam Rating History Modal -->
-    <div v-if="ratingHistoryTeam" class="modal-mask" @click.self="ratingHistoryTeam = null">
-      <div class="modal-box wide">
-        <h3>「{{ ratingHistoryTeam.name }}」评级历史</h3>
-        <table v-if="ratingHistoryData.length > 0" class="history-table">
-          <thead>
-            <tr>
-              <th>年月</th>
-              <th>评级</th>
-              <th>备注</th>
-              <th style="width: 60px">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="r in ratingHistoryData" :key="r.id">
-              <td>{{ r.year }}年{{ r.month }}月</td>
-              <td><span class="rating-badge" :class="getRatingClass(r.rating)">{{ r.rating }}</span></td>
-              <td class="muted">{{ r.comment || '-' }}</td>
-              <td>
-                <button class="btn-sm btn-danger" @click="handleDeleteTeamRating(r.id)">删除</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <div v-else class="empty-state">暂无评级记录</div>
-        <div class="modal-footer">
-          <button class="btn-secondary" @click="ratingHistoryTeam = null">关闭</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Toast -->
     <transition name="toast">
       <div v-if="toast" class="toast" :class="toast.type">{{ toast.msg }}</div>
     </transition>
@@ -581,17 +587,15 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
-import { useProjectStore } from '@/stores/project'
-import { getGoalScores, getMilestones, createMilestone, updateMilestone, deleteMilestone, updateProject, createProject as createProjectApi, deleteProject as deleteProjectApi, createReport, updateReport, deleteReport, uploadReportPdf, deleteReportPdf, createSubTeam, updateSubTeam, deleteSubTeam, addSubTeamMember, updateSubTeamMember, deleteSubTeamMember, upsertSubTeamRating, getSubTeamRatings, deleteSubTeamRating, getKeyProjects } from '@/api'
-import type { GoalWithLatestScore, GoalScore, Milestone as MilestoneType, MonthlyReport as MonthlyReportType, SubTeam as SubTeamType, SubTeamMember as SubTeamMemberType, SubTeamRating as SubTeamRatingType, KeyProject } from '@/api'
+import { getSpecialProjects, getGoalScores, getMilestones, createMilestone, updateMilestone, deleteMilestone, updateProject, createProject as createProjectApi, deleteProject, createReport, updateReport, deleteReport, uploadReportPdf, deleteReportPdf, createSubTeam, updateSubTeam, deleteSubTeam, addSubTeamMember, updateSubTeamMember, deleteSubTeamMember, upsertSubTeamRating, getSubTeamRatings, deleteSubTeamRating, getProject, getProjectGoals, createGoal, updateGoal, deleteGoal, upsertGoalScore, deleteScore, getReports, getKeyProjects } from '@/api'
+import type { GoalWithLatestScore, GoalScore, Milestone as MilestoneType, MonthlyReport as MonthlyReportType, SubTeam as SubTeamType, SubTeamMember as SubTeamMemberType, SubTeamRating as SubTeamRatingType, Project, KeyProject } from '@/api'
 import dayjs from 'dayjs'
 
-const store = useProjectStore()
-
+const projects = ref<Project[]>([])
 const selectedProjectId = ref<number | string>('')
 const goals = ref<GoalWithLatestScore[]>([])
 const currentProject = computed(() =>
-  store.projects.find(p => p.id === Number(selectedProjectId.value)) ?? null
+  projects.value.find(p => p.id === Number(selectedProjectId.value)) ?? null
 )
 
 const showGoalModal = ref(false)
@@ -620,6 +624,11 @@ const scoreForm = reactive({
   month: dayjs().month() + 1,
   score: 80,
   comment: '',
+  monthly_value: '',
+  actual_value: '',
+  monthly_rate: 0,
+  yearly_value: '',
+  yearly_rate: 0,
 })
 
 const historyGoal = ref<GoalWithLatestScore | null>(null)
@@ -685,39 +694,26 @@ const openEditSubTeam = (st: SubTeamType) => {
 
 const handleSaveSubTeam = async () => {
   if (!subTeamForm.name.trim() || !selectedProjectId.value) return
-  const pid = Number(selectedProjectId.value)
-  try {
-    if (editingSubTeamId.value) {
-      await updateSubTeam(editingSubTeamId.value, {
-        name: subTeamForm.name.trim(),
-        leader: subTeamForm.leader.trim() || undefined,
-      })
-      showToast('子团队已更新')
-    } else {
-      const members = subTeamForm.membersText.trim().split('\n').filter(l => l.trim()).map(line => {
-        const parts = line.trim().split(/[-—]/)
-        return { name: parts[0].trim(), role: parts[1]?.trim() || undefined }
-      })
-      await createSubTeam(pid, {
-        name: subTeamForm.name.trim(),
-        leader: subTeamForm.leader.trim() || undefined,
-        members,
-      })
-      showToast('子团队已创建')
-    }
-    showSubTeamModal.value = false
-    await loadGoals()
-  } catch (e: any) {
-    console.error('save subteam error', e)
-    showToast(e?.response?.data?.detail || '保存失败', 'error')
+  if (editingSubTeamId.value) {
+    await updateSubTeam(editingSubTeamId.value, {
+      name: subTeamForm.name.trim(),
+      leader: subTeamForm.leader.trim() || undefined,
+    })
+  } else {
+    await createSubTeam(Number(selectedProjectId.value), {
+      name: subTeamForm.name.trim(),
+      leader: subTeamForm.leader.trim() || undefined,
+      members: [],
+    })
   }
+  showSubTeamModal.value = false
+  await loadSubTeams()
 }
 
 const handleDeleteSubTeam = async (id: number) => {
-  if (!confirm('确定删除该子团队？将同时删除其下所有成员和评级记录！')) return
+  if (!confirm('确定删除该子团队？')) return
   await deleteSubTeam(id)
-  showToast('子团队已删除', 'warn')
-  await loadGoals()
+  await loadSubTeams()
 }
 
 const openAddMember = (st: SubTeamType) => {
@@ -727,24 +723,6 @@ const openAddMember = (st: SubTeamType) => {
   showMemberModal.value = true
 }
 
-const handleSaveMember = async () => {
-  if (!memberForm.name.trim() || !memberTargetTeam.value) return
-  await addSubTeamMember(memberTargetTeam.value.id, {
-    name: memberForm.name.trim(),
-    role: memberForm.role.trim() || undefined,
-  })
-  showToast('成员已添加')
-  showMemberModal.value = false
-  await loadGoals()
-}
-
-const handleDeleteMember = async (memberId: number) => {
-  if (!confirm('确定移除该成员？')) return
-  await deleteSubTeamMember(memberId)
-  showToast('成员已移除', 'warn')
-  await loadGoals()
-}
-
 const openEditMember = (m: SubTeamMemberType) => {
   editingMember.value = m
   editMemberForm.name = m.name
@@ -752,15 +730,30 @@ const openEditMember = (m: SubTeamMemberType) => {
   showEditMemberModal.value = true
 }
 
-const handleSaveEditMember = async () => {
-  if (!editMemberForm.name.trim() || !editingMember.value) return
+const handleAddMember = async () => {
+  if (!memberForm.name.trim() || !memberTargetTeam.value) return
+  await addSubTeamMember(memberTargetTeam.value.id, {
+    name: memberForm.name.trim(),
+    role: memberForm.role.trim() || undefined,
+  })
+  showMemberModal.value = false
+  await loadSubTeams()
+}
+
+const handleEditMember = async () => {
+  if (!editingMember.value) return
   await updateSubTeamMember(editingMember.value.id, {
     name: editMemberForm.name.trim(),
     role: editMemberForm.role.trim() || undefined,
   })
   showEditMemberModal.value = false
-  showToast('成员已更新')
-  await loadGoals()
+  await loadSubTeams()
+}
+
+const handleDeleteMember = async (id: number) => {
+  if (!confirm('确定移除该成员？')) return
+  await deleteSubTeamMember(id)
+  await loadSubTeams()
 }
 
 const openSubTeamRatingModal = (st: SubTeamType) => {
@@ -772,16 +765,15 @@ const openSubTeamRatingModal = (st: SubTeamType) => {
 }
 
 const handleSaveRating = async () => {
-  if (!ratingTargetTeam.value || !ratingForm.rating) return
+  if (!ratingTargetTeam.value) return
   await upsertSubTeamRating(ratingTargetTeam.value.id, {
     year: ratingForm.year,
     month: ratingForm.month,
     rating: ratingForm.rating,
-    comment: ratingForm.comment || undefined,
+    comment: ratingForm.comment.trim() || undefined,
   })
   ratingTargetTeam.value = null
-  showToast('评级已提交')
-  await loadGoals()
+  await loadSubTeams()
 }
 
 const openSubTeamRatingHistory = async (st: SubTeamType) => {
@@ -790,90 +782,172 @@ const openSubTeamRatingHistory = async (st: SubTeamType) => {
   ratingHistoryData.value = res.data
 }
 
-const handleDeleteTeamRating = async (ratingId: number) => {
+const handleDeleteRating = async (id: number) => {
   if (!confirm('确定删除该评级记录？')) return
-  await deleteSubTeamRating(ratingId)
+  await deleteSubTeamRating(id)
   if (ratingHistoryTeam.value) {
-    const res = await getSubTeamRatings(ratingHistoryTeam.value.id)
-    ratingHistoryData.value = res.data
+    await openSubTeamRatingHistory(ratingHistoryTeam.value)
   }
-  await loadGoals()
-  showToast('评级已删除', 'warn')
 }
 
-const showProjectModal = ref(false)
-const editingProjectId = ref<number | null>(null)
-const projectForm = reactive({ name: '', owner: '', department: '', target_date: '' })
-
-const saveProgress = async () => {
-  if (!selectedProjectId.value) return
-  await updateProject(Number(selectedProjectId.value), { progress: progressValue.value })
-  await store.fetchProjects()
-  showToast('进度已更新')
+const scoreTagClass = (score: number) => {
+  if (score >= 80) return 'green'
+  if (score >= 60) return 'orange'
+  return 'red'
 }
 
-const openAddProject = () => {
-  editingProjectId.value = null
-  projectForm.name = ''
-  projectForm.owner = ''
-  projectForm.department = ''
-  projectForm.target_date = ''
-  showProjectModal.value = true
+const openAddGoal = () => {
+  editingGoalId.value = null
+  goalForm.name = ''
+  goalForm.description = ''
+  goalForm.unit = ''
+  goalForm.key_project_id = null
+  showGoalModal.value = true
 }
 
-const openEditProject = () => {
-  if (!currentProject.value) return
-  editingProjectId.value = currentProject.value.id
-  projectForm.name = currentProject.value.name
-  projectForm.owner = currentProject.value.owner || ''
-  projectForm.department = currentProject.value.department || ''
-  projectForm.target_date = currentProject.value.target_date || ''
-  showProjectModal.value = true
+const openEditGoal = (goal: GoalWithLatestScore) => {
+  editingGoalId.value = goal.id
+  goalForm.name = goal.name
+  goalForm.description = goal.description || ''
+  goalForm.unit = goal.unit || ''
+  goalForm.key_project_id = (goal as any).key_project_id ?? null
+  showGoalModal.value = true
 }
 
-const handleSaveProject = async () => {
-  if (!projectForm.name.trim()) return
-  if (editingProjectId.value) {
-    await updateProject(editingProjectId.value, {
-      name: projectForm.name.trim(),
-      owner: projectForm.owner.trim() || undefined,
-      department: projectForm.department.trim() || undefined,
-      target_date: projectForm.target_date || undefined,
+const handleSaveGoal = async () => {
+  if (!goalForm.name.trim() || !selectedProjectId.value) return
+  if (editingGoalId.value) {
+    await updateGoal(editingGoalId.value, {
+      name: goalForm.name.trim(),
+      description: goalForm.description.trim() || undefined,
+      unit: goalForm.unit.trim() || undefined,
+      key_project_id: goalForm.key_project_id ?? undefined,
     })
-    selectedProjectId.value = editingProjectId.value
-    showToast('专项已更新')
   } else {
-    const res = await createProjectApi({
-      name: projectForm.name.trim(),
-      owner: projectForm.owner.trim() || undefined,
-      department: projectForm.department.trim() || undefined,
-      target_date: projectForm.target_date || undefined,
+    await createGoal(Number(selectedProjectId.value), {
+      name: goalForm.name.trim(),
+      description: goalForm.description.trim() || undefined,
+      key_project_id: goalForm.key_project_id ?? undefined,
     })
-    await store.fetchProjects()
-    selectedProjectId.value = res.data.id
-    showToast('专项已创建')
   }
-  showProjectModal.value = false
-  await store.fetchProjects()
+  showGoalModal.value = false
   await loadGoals()
 }
 
-const handleDeleteProject = async () => {
-  if (!currentProject.value) return
-  if (!confirm(`确定删除专项「${currentProject.value.name}」？此操作将同时删除其下所有目标、评分和里程碑！`)) return
-  await deleteProjectApi(currentProject.value.id)
-  selectedProjectId.value = ''
-  await store.fetchProjects()
-  goals.value = []
-  milestones.value = []
-  showToast('专项已删除', 'warn')
+const handleDeleteGoal = async (goal: GoalWithLatestScore) => {
+  if (!confirm(`确定删除目标「${goal.name}」？`)) return
+  await deleteGoal(goal.id)
+  await loadGoals()
 }
 
-import MarkdownIt from 'markdown-it'
-const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
+const openScoreModal = (goal: GoalWithLatestScore) => {
+  scoringGoal.value = goal
+  scoreForm.year = goal.latest_year || dayjs().year()
+  scoreForm.month = goal.latest_month || dayjs().month() + 1
+  scoreForm.score = goal.latest_score || 80
+  scoreForm.comment = goal.latest_comment || ''
+  scoreForm.monthly_value = goal.latest_monthly_value || ''
+  scoreForm.actual_value = goal.latest_monthly_actual || ''
+  scoreForm.monthly_rate = goal.latest_monthly_rate || 0
+  scoreForm.yearly_value = goal.latest_yearly_value || ''
+  scoreForm.yearly_rate = goal.latest_yearly_rate || 0
+}
 
-const renderMarkdown = (content: string) => {
-  return md.render(content || '（暂无内容）')
+const handleScoreGoal = async () => {
+  if (!scoringGoal.value) return
+  await upsertGoalScore(scoringGoal.value.id, {
+    year: scoreForm.year,
+    month: scoreForm.month,
+    score: scoreForm.score,
+    comment: scoreForm.comment.trim() || undefined,
+    monthly_value: scoreForm.monthly_value.trim() || undefined,
+    actual_value: scoreForm.actual_value.trim() || undefined,
+    monthly_rate: scoreForm.monthly_rate || undefined,
+    yearly_value: scoreForm.yearly_value.trim() || undefined,
+    yearly_rate: scoreForm.yearly_rate || undefined,
+  })
+  scoringGoal.value = null
+  await loadGoals()
+}
+
+const openHistoryModal = async (goal: GoalWithLatestScore) => {
+  historyGoal.value = goal
+  const res = await getGoalScores(goal.id)
+  historyScores.value = res.data
+}
+
+const handleDeleteScore = async (scoreId: number) => {
+  if (!confirm('确定删除该评分记录？')) return
+  await deleteScore(scoreId)
+  if (historyGoal.value) {
+    await openHistoryModal(historyGoal.value)
+  }
+}
+
+const loadGoals = async () => {
+  if (!selectedProjectId.value) {
+    goals.value = []
+    progressValue.value = 0
+    return
+  }
+  const res = await getProject(Number(selectedProjectId.value))
+  goals.value = res.data.goals
+  progressValue.value = res.data.progress || 0
+}
+
+const openAddMilestone = () => {
+  editingMsId.value = null
+  msForm.event = ''
+  msForm.group_name = ''
+  msForm.due_date = ''
+  showMsModal.value = true
+}
+
+const openEditMilestone = (ms: MilestoneType) => {
+  editingMsId.value = ms.id
+  msForm.event = ms.event || ''
+  msForm.group_name = ms.group_name || ''
+  msForm.due_date = ms.due_date || ''
+  showMsModal.value = true
+}
+
+const handleSaveMilestone = async () => {
+  if (!msForm.event.trim() || !selectedProjectId.value) return
+  if (editingMsId.value) {
+    await updateMilestone(editingMsId.value, {
+      event: msForm.event.trim(),
+      group_name: msForm.group_name.trim() || undefined,
+      due_date: msForm.due_date || undefined,
+    })
+  } else {
+    await createMilestone(Number(selectedProjectId.value), {
+      event: msForm.event.trim(),
+      group_name: msForm.group_name.trim() || undefined,
+      due_date: msForm.due_date || undefined,
+    })
+  }
+  showMsModal.value = false
+  await loadMilestones()
+}
+
+const handleDeleteMilestone = async (id: number) => {
+  if (!confirm('确定删除该里程碑？')) return
+  await deleteMilestone(id)
+  await loadMilestones()
+}
+
+const toggleMilestone = async (ms: MilestoneType) => {
+  await updateMilestone(ms.id, { achieved: !ms.achieved })
+  await loadMilestones()
+}
+
+const loadMilestones = async () => {
+  if (!selectedProjectId.value) {
+    milestones.value = []
+    return
+  }
+  const res = await getMilestones(Number(selectedProjectId.value))
+  milestones.value = res.data
 }
 
 const openAddReport = () => {
@@ -881,18 +955,18 @@ const openAddReport = () => {
   reportForm.year = dayjs().year()
   reportForm.month = dayjs().month() + 1
   reportForm.content = ''
-  reportPreview.value = false
   reportPdfPath.value = null
   reportPendingPdf.value = null
+  reportPreview.value = false
   showReportModal.value = true
 }
 
-const openEditReport = (r: MonthlyReportType) => {
+const openEditReport = async (r: MonthlyReportType) => {
   editingReportId.value = r.id
   reportForm.year = r.year
   reportForm.month = r.month
   reportForm.content = r.content
-  reportPdfPath.value = r.pdf_path
+  reportPdfPath.value = r.pdf_path || null
   reportPendingPdf.value = null
   reportPreview.value = false
   showReportModal.value = true
@@ -943,7 +1017,7 @@ const handleRemovePdf = async () => {
 
 const handleSaveReport = async () => {
   if (!selectedProjectId.value) return
-    reportSaving.value = true
+  reportSaving.value = true
   try {
     const pid = Number(selectedProjectId.value)
     let reportId = editingReportId.value
@@ -965,7 +1039,7 @@ const handleSaveReport = async () => {
       await doPdfUpload(reportPendingPdf.value)
     }
     showReportModal.value = false
-    await loadGoals()
+    await loadReports()
   } finally {
     reportSaving.value = false
   }
@@ -975,7 +1049,7 @@ const handleDeleteReport = async (id: number) => {
   if (!confirm('确定删除该月度报告？')) return
   await deleteReport(id)
   showToast('月报已删除', 'warn')
-  await loadGoals()
+  await loadReports()
 }
 
 const toast = ref<{ msg: string; type: string } | null>(null)
@@ -984,169 +1058,103 @@ const showToast = (msg: string, type = 'success') => {
   setTimeout(() => { toast.value = null }, 2000)
 }
 
-onMounted(async () => {
-  await store.fetchProjects()
-  await loadKeyProjects()
-})
-
-const loadGoals = async () => {
+const loadReports = async () => {
   if (!selectedProjectId.value) {
-    goals.value = []
-    milestones.value = []
+    reports.value = []
+    return
+  }
+  const res = await getReports(Number(selectedProjectId.value))
+  reports.value = res.data
+}
+
+const loadSubTeams = async () => {
+  if (!selectedProjectId.value) {
     subTeams.value = []
     return
   }
-  const pid = Number(selectedProjectId.value)
-  const detail = await store.fetchProjectDetail(pid)
-  goals.value = detail?.goals ?? []
-  milestones.value = detail?.milestones ?? []
-  reports.value = detail?.reports ?? []
-  subTeams.value = detail?.sub_teams ?? []
-  progressValue.value = currentProject.value?.progress ?? 0
+  const res = await getProject(Number(selectedProjectId.value))
+  subTeams.value = res.data.sub_teams
 }
 
-const projects = computed(() => store.projects)
+const showProjectModal = ref(false)
+const editingProjectId = ref<number | null>(null)
+const projectForm = reactive({ name: '', owner: '', department: '', target_date: '' })
 
-const scoreTagClass = (score: number) => {
-  if (score >= 80) return 'green'
-  if (score >= 60) return 'orange'
-  return 'red'
+const saveProgress = async () => {
+  if (!selectedProjectId.value) return
+  await updateProject(Number(selectedProjectId.value), { progress: progressValue.value })
+  await loadProjects()
 }
 
-const openAddGoal = () => {
-  editingGoalId.value = null
-  goalForm.name = ''
-  goalForm.description = ''
-  goalForm.unit = ''
-  goalForm.key_project_id = null
-  showGoalModal.value = true
+const openAddProject = () => {
+  editingProjectId.value = null
+  projectForm.name = ''
+  projectForm.owner = ''
+  projectForm.department = ''
+  projectForm.target_date = ''
+  showProjectModal.value = true
 }
 
-const openEditGoal = (goal: GoalWithLatestScore) => {
-  editingGoalId.value = goal.id
-  goalForm.name = goal.name
-  goalForm.description = goal.description ?? ''
-  goalForm.unit = (goal as any).unit ?? ''
-  goalForm.key_project_id = (goal as any).key_project_id ?? null
-  showGoalModal.value = true
+const openEditProject = () => {
+  if (!currentProject.value) return
+  editingProjectId.value = currentProject.value.id
+  projectForm.name = currentProject.value.name
+  projectForm.owner = currentProject.value.owner || ''
+  projectForm.department = currentProject.value.department || ''
+  projectForm.target_date = currentProject.value.target_date || ''
+  showProjectModal.value = true
 }
 
-const handleSaveGoal = async () => {
-  if (!goalForm.name.trim() || !selectedProjectId.value) return
-  const pid = Number(selectedProjectId.value)
-  if (editingGoalId.value) {
-    await store.editGoal(editingGoalId.value, pid, {
-      name: goalForm.name.trim(),
-      description: goalForm.description.trim() || undefined,
-      unit: goalForm.unit.trim() || undefined,
-      key_project_id: goalForm.key_project_id,
+const handleSaveProject = async () => {
+  if (!projectForm.name.trim()) return
+  if (editingProjectId.value) {
+    await updateProject(editingProjectId.value, {
+      name: projectForm.name.trim(),
+      owner: projectForm.owner.trim() || undefined,
+      department: projectForm.department.trim() || undefined,
+      target_date: projectForm.target_date || undefined,
     })
-    showToast('目标已更新')
+    selectedProjectId.value = editingProjectId.value
   } else {
-    await store.addGoal(pid, goalForm.name.trim(), goalForm.description.trim() || undefined, goalForm.key_project_id)
-    showToast('目标已添加')
-  }
-  showGoalModal.value = false
-  await loadGoals()
-}
-
-const handleDeleteGoal = async (goal: GoalWithLatestScore) => {
-  if (!confirm(`确定删除目标「${goal.name}」？`)) return
-  await store.removeGoal(goal.id, Number(selectedProjectId.value))
-  showToast('目标已删除', 'warn')
-  await loadGoals()
-}
-
-const openScoreModal = (goal: GoalWithLatestScore) => {
-  scoringGoal.value = goal
-  scoreForm.year = dayjs().year()
-  scoreForm.month = dayjs().month() + 1
-  scoreForm.score = goal.latest_score ?? 80
-  scoreForm.comment = ''
-}
-
-const handleScore = async () => {
-  if (!scoringGoal.value || !selectedProjectId.value) return
-  await store.scoreGoal(
-    scoringGoal.value.id,
-    scoreForm.year,
-    scoreForm.month,
-    scoreForm.score,
-    scoreForm.comment || undefined,
-  )
-  scoringGoal.value = null
-  await loadGoals()
-  await store.fetchProjects()
-  await store.fetchStats()
-  showToast('评分已提交')
-}
-
-const openAddMilestone = () => {
-  editingMsId.value = null
-  msForm.event = ''
-  msForm.group_name = ''
-  msForm.due_date = ''
-  showMsModal.value = true
-}
-
-const openEditMilestone = (ms: MilestoneType) => {
-  editingMsId.value = ms.id
-  msForm.event = ms.event || ''
-  msForm.group_name = ms.group_name || ''
-  msForm.due_date = ms.due_date || ''
-  showMsModal.value = true
-}
-
-const handleSaveMilestone = async () => {
-  if (!msForm.event.trim() || !selectedProjectId.value) return
-  const pid = Number(selectedProjectId.value)
-  if (editingMsId.value) {
-    await updateMilestone(editingMsId.value, {
-      event: msForm.event.trim(),
-      group_name: msForm.group_name.trim() || undefined,
-      due_date: msForm.due_date || undefined,
+    const res = await createProjectApi({
+      name: projectForm.name.trim(),
+      owner: projectForm.owner.trim() || undefined,
+      department: projectForm.department.trim() || undefined,
+      target_date: projectForm.target_date || undefined,
+      special: 1,
     })
-    showToast('里程碑已更新')
-  } else {
-    await createMilestone(pid, {
-      event: msForm.event.trim(),
-      group_name: msForm.group_name.trim() || undefined,
-      due_date: msForm.due_date || undefined,
-    })
-    showToast('里程碑已添加')
+    await loadProjects()
+    selectedProjectId.value = res.data.id
   }
-  showMsModal.value = false
+  showProjectModal.value = false
+  await loadProjects()
   await loadGoals()
 }
 
-const handleDeleteMilestone = async (id: number) => {
-  if (!confirm('确定删除该里程碑？')) return
-  await deleteMilestone(id)
-  showToast('里程碑已删除', 'warn')
-  await loadGoals()
+const handleDeleteProject = async () => {
+  if (!currentProject.value) return
+  if (!confirm(`确定删除专项「${currentProject.value.name}」？此操作将同时删除其下所有目标、评分和里程碑！`)) return
+  await deleteProject(currentProject.value.id)
+  selectedProjectId.value = ''
+  await loadProjects()
+  goals.value = []
+  milestones.value = []
 }
 
-const toggleMilestone = async (ms: MilestoneType) => {
-  await updateMilestone(ms.id, { achieved: !ms.achieved })
-  await loadGoals()
+const loadProjects = async () => {
+  const res = await getSpecialProjects()
+  projects.value = res.data
 }
 
-const openHistoryModal = async (goal: GoalWithLatestScore) => {
-  historyGoal.value = goal
-  historyScores.value = await store.fetchGoalScores(goal.id)
-}
+import MarkdownIt from 'markdown-it'
+const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 
-const handleDeleteScore = async (scoreId: number) => {
-  if (!confirm('确定删除该评分记录？')) return
-  await store.removeScore(scoreId)
-  if (historyGoal.value) {
-    historyScores.value = await store.fetchGoalScores(historyGoal.value.id)
-  }
-  await loadGoals()
-  await store.fetchProjects()
-  await store.fetchStats()
-  showToast('评分已删除', 'warn')
-}
+const renderMarkdown = (text: string) => md.render(text)
+
+onMounted(async () => {
+  await loadProjects()
+  await loadKeyProjects()
+})
 </script>
 
 <style scoped>
@@ -1155,6 +1163,23 @@ const handleDeleteScore = async (scoreId: number) => {
   margin: 0 auto;
   padding: 20px;
   min-height: 100vh;
+}
+
+.goal-unit-tag {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.key-project-tag {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 4px;
+  background: rgba(139, 92, 246, 0.15);
+  color: #a78bfa;
+  font-size: 11px;
+  font-weight: 500;
+  margin-left: 4px;
 }
 
 .admin-header {
@@ -1717,19 +1742,6 @@ const handleDeleteScore = async (scoreId: number) => {
   white-space: nowrap;
 }
 
-.progress-input-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.progress-num {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--accent-blue);
-  min-width: 36px;
-}
-
 .subteams-container {
   display: flex;
   flex-direction: column;
@@ -1846,125 +1858,31 @@ const handleDeleteScore = async (scoreId: number) => {
   padding: 2px 6px;
 }
 
-.no-members {
+.empty-members {
+  text-align: center;
+  padding: 20px;
   color: var(--text-muted);
-  font-size: 12px;
-  padding: 8px 0;
+  font-size: 13px;
 }
 
-.subteam-latest-rating {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px dashed var(--border-subtle);
-}
-
-.rating-label {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.rating-badge {
+.rating-tag {
   display: inline-block;
-  padding: 2px 12px;
+  padding: 2px 10px;
   border-radius: 4px;
-  font-size: 14px;
-  font-weight: 800;
-}
-
-.rating-badge.green { background: rgba(16, 185, 129, 0.2); color: var(--accent-green); }
-.rating-badge.red { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); }
-
-.rating-date {
   font-size: 12px;
-  color: var(--text-muted);
+  font-weight: 600;
 }
 
-.rating-options {
-  display: flex;
-  gap: 8px;
-}
+.rating-tag.green { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); }
+.rating-tag.red { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); }
 
-.rating-option {
-  padding: 8px 18px;
-  border-radius: 6px;
-  border: 2px solid var(--border-subtle);
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 700;
-  transition: all 0.2s;
-}
-
-.rating-option:hover {
-  border-color: var(--accent-blue);
-}
-
-.rating-option.selected {
-  border-width: 2px;
-}
-
-.rating-option.selected.green { border-color: var(--accent-green); color: var(--accent-green); background: rgba(16, 185, 129, 0.1); }
-.rating-option.selected.red { border-color: var(--accent-red); color: var(--accent-red); background: rgba(239, 68, 68, 0.1); }
-
-.rating-option.green { border-color: rgba(16, 185, 129, 0.3); }
-.rating-option.red { border-color: rgba(239, 68, 68, 0.3); }
-
-/* Score Modal - Extra Fields */
-.score-modal-wide {
-  max-width: 580px;
-}
-
-.score-extra-fields {
-  margin-bottom: 8px;
-}
-
-.score-field-row {
-  display: flex;
-  gap: 12px;
-}
-
-.score-field {
-  flex: 1;
-}
-
-.goal-unit-tag {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-weight: 400;
-}
-
-.key-project-tag {
-  display: inline-block;
-  padding: 1px 8px;
+.special-badge {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 10px;
   border-radius: 4px;
   background: rgba(139, 92, 246, 0.15);
-  color: #a78bfa;
-  font-size: 11px;
-  font-weight: 500;
-  margin-left: 4px;
-}
-
-.goal-desc-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  margin-left: 4px;
-  font-size: 11px;
-  font-weight: 700;
-  color: #3b82f6;
-  background: rgba(59,130,246,0.12);
-  border-radius: 50%;
-  cursor: pointer;
-  vertical-align: middle;
-  transition: background 0.15s;
-}
-.goal-desc-icon:hover {
-  background: rgba(59,130,246,0.25);
+  color: #8b5cf6;
+  margin-left: 10px;
 }
 </style>

@@ -33,6 +33,7 @@
           <div class="goal-header">
             <span class="project-name">{{ row.project_name }}</span>
             <span class="goal-name">{{ row.goal_name }}</span>
+            <span v-if="row.key_project_name" class="key-project-tag">{{ row.key_project_name }}</span>
             <span v-if="row.description" class="goal-desc-icon" @click.stop="showGoalDesc(row)" title="查看描述">?</span>
           </div>
           <div class="goal-metrics">
@@ -70,6 +71,10 @@
       <router-link to="/mobile/goals" class="nav-item">
         <span class="nav-icon">🎯</span>
         <span>目标</span>
+      </router-link>
+      <router-link to="/mobile/key-projects" class="nav-item">
+        <span class="nav-icon">🔑</span>
+        <span>关键项目</span>
       </router-link>
     </nav>
 
@@ -308,6 +313,16 @@ onMounted(() => {
   font-weight: 600;
 }
 
+.key-project-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(139, 92, 246, 0.15);
+  color: #a78bfa;
+  font-size: 10px;
+  font-weight: 500;
+}
+
 .goal-metrics {
   display: flex;
   gap: 8px;
@@ -368,7 +383,7 @@ onMounted(() => {
   margin: 0 auto;
   display: flex;
   justify-content: space-around;
-  padding: 12px 16px;
+  padding: 10px 8px;
   background: var(--bg-secondary);
   border-top: 1px solid var(--border-subtle);
 }
@@ -377,10 +392,10 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   color: var(--text-muted);
   text-decoration: none;
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .nav-item.router-link-exact-active {
@@ -388,7 +403,7 @@ onMounted(() => {
 }
 
 .nav-icon {
-  font-size: 22px;
+  font-size: 20px;
 }
 
 .goal-desc-icon {

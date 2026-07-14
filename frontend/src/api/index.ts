@@ -18,6 +18,7 @@ export interface Project {
   score: number
   status: string
   target_date?: string
+  special?: number
 }
 
 export interface Stats {
@@ -46,14 +47,19 @@ export interface GoalScore {
   score: number
   comment?: string
   monthly_value?: string | null
+  actual_value?: string | null
   monthly_rate?: number | null
   yearly_value?: string | null
   yearly_rate?: number | null
+  gap_analysis?: string | null
 }
 
 export interface GoalWithLatestScore {
   id: number
   name: string
+  project_id?: number
+  project_name?: string | null
+  key_project_id?: number | null
   description?: string
   unit?: string | null
   monthly_target?: number | null
@@ -62,11 +68,12 @@ export interface GoalWithLatestScore {
   latest_year: number | null
   latest_month: number | null
   latest_comment: string | null
-  latest_monthly_value?: string | null  // 月度目标值
-  latest_monthly_actual?: string | null  // 月度实际值
+  latest_monthly_value?: string | null
+  latest_monthly_actual?: string | null
   latest_monthly_rate?: number | null
   latest_yearly_value?: string | null
   latest_yearly_rate?: number | null
+  latest_gap_analysis?: string | null
 }
 
 export interface Milestone {
@@ -113,6 +120,17 @@ export interface SubTeam {
   ratings: SubTeamRating[]
 }
 
+export interface KeyProject {
+  id: number
+  name: string
+  owner: string
+  start_date: string | null
+  end_date: string | null
+  progress: string
+  status: string
+  score?: number | null
+}
+
 export interface ProjectWithGoals extends Project {
   goals: GoalWithLatestScore[]
   milestones: Milestone[]
@@ -121,23 +139,32 @@ export interface ProjectWithGoals extends Project {
 }
 
 export const getProjects = () => api.get<Project[]>('/api/projects')
+export const getSpecialProjects = () => api.get<Project[]>('/api/special-projects')
 export const getStats = () => api.get<Stats>('/api/stats')
 export const getProject = (id: number) => api.get<ProjectWithGoals>(`/api/projects/${id}`)
 export const updateProject = (id: number, data: { name?: string; owner?: string; department?: string; target_date?: string; progress?: number }) =>
   api.put<ProjectWithGoals>(`/api/projects/${id}`, data)
-export const createProject = (data: { name: string; owner?: string; department?: string; target_date?: string }) =>
+export const createProject = (data: { name: string; owner?: string; department?: string; target_date?: string; special?: number }) =>
   api.post<ProjectWithGoals>('/api/projects', data)
 export const deleteProject = (id: number) => api.delete(`/api/projects/${id}`)
 
+export const getKeyProjects = () => api.get<KeyProject[]>('/api/key-projects')
+export const getKeyProject = (id: number) => api.get<KeyProject & { goals: GoalWithLatestScore[] }>(`/api/key-projects/${id}`)
+export const createKeyProject = (data: { name: string; owner?: string; start_date?: string; end_date?: string; progress?: string; status?: string }) =>
+  api.post<KeyProject>('/api/key-projects', data)
+export const updateKeyProject = (id: number, data: { name?: string; owner?: string; start_date?: string; end_date?: string; progress?: string; status?: string }) =>
+  api.put<KeyProject>(`/api/key-projects/${id}`, data)
+export const deleteKeyProject = (id: number) => api.delete(`/api/key-projects/${id}`)
+
 export const getProjectGoals = (projectId: number) => api.get<Goal[]>(`/api/projects/${projectId}/goals`)
-export const createGoal = (projectId: number, data: { name: string; description?: string }) =>
+export const createGoal = (projectId: number, data: { name: string; description?: string; key_project_id?: number | null }) =>
   api.post<Goal>(`/api/projects/${projectId}/goals`, data)
-export const updateGoal = (goalId: number, data: { name?: string; description?: string; unit?: string }) =>
+export const updateGoal = (goalId: number, data: { name?: string; description?: string; unit?: string; key_project_id?: number | null }) =>
   api.put<Goal>(`/api/goals/${goalId}`, data)
 export const deleteGoal = (goalId: number) => api.delete(`/api/goals/${goalId}`)
 
 export const getGoalScores = (goalId: number) => api.get<GoalScore[]>(`/api/goals/${goalId}/scores`)
-export const upsertGoalScore = (goalId: number, data: { year: number; month: number; score: number; comment?: string; monthly_value?: string | null; monthly_rate?: number | null; yearly_value?: string | null; yearly_rate?: number | null }) =>
+export const upsertGoalScore = (goalId: number, data: { year: number; month: number; score: number; comment?: string; monthly_value?: string | null; actual_value?: string | null; monthly_rate?: number | null; yearly_value?: string | null; yearly_rate?: number | null; gap_analysis?: string | null }) =>
   api.post<GoalScore>(`/api/goals/${goalId}/scores`, data)
 export const deleteScore = (scoreId: number) => api.delete(`/api/scores/${scoreId}`)
 

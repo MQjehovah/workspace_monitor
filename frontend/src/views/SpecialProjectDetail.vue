@@ -1,14 +1,14 @@
 <template>
   <div class="detail-page">
     <header class="detail-header">
-      <router-link to="/" class="back-btn">&larr; 返回看板</router-link>
+      <router-link to="/special-dashboard" class="back-btn">&larr; 返回看板</router-link>
       <span class="update-time">数据更新：{{ currentTime }}</span>
     </header>
 
     <div v-if="project" class="detail-content">
       <div class="project-hero">
         <div class="hero-left">
-          <h1>{{ project.name }}</h1>
+          <h1>{{ project.name }}<span class="special-badge">特殊专项</span></h1>
           <div class="hero-meta">
             <span class="meta-item">负责人：{{ project.owner }}</span>
             <span class="meta-item">部门：{{ project.department }}</span>
@@ -175,26 +175,6 @@
       </div>
     </div>
 
-    <!-- Fullscreen PDF Overlay -->
-    <div v-if="fullscreenPdfUrl" class="pdf-fullscreen-overlay" @keydown.escape="fullscreenPdfUrl = ''">
-      <div class="pdf-fullscreen-header">
-        <span>PDF 预览</span>
-        <button class="pdf-fullscreen-close" @click="fullscreenPdfUrl = ''">关闭 (Esc)</button>
-      </div>
-      <object :data="fullscreenPdfUrl" type="application/pdf" class="pdf-fullscreen-iframe">
-        <embed :src="fullscreenPdfUrl" type="application/pdf" />
-      </object>
-    </div>
-
-    <!-- 目标描述弹窗 -->
-    <div v-if="showDescModal" class="desc-modal-mask" @click.self="showDescModal = false">
-      <div class="desc-modal-box">
-        <h3>{{ descGoalName }}</h3>
-        <p class="desc-content">{{ descGoalContent }}</p>
-        <button class="desc-close-btn" @click="showDescModal = false">关闭</button>
-      </div>
-    </div>
-
     <div v-if="!project" class="loading">加载中...</div>
   </div>
 </template>
@@ -231,9 +211,6 @@ const showGoalDesc = (goal: any) => {
   showDescModal.value = true
 }
 
-const keyProjects = ref<KeyProject[]>([])
-const getKeyProjectName = (id: number) => keyProjects.value.find(kp => kp.id === id)?.name || ''
-
 const currentTime = computed(() => dayjs().format('YYYY-MM-DD HH:mm'))
 
 const achievedTeamCount = computed(() => {
@@ -266,13 +243,6 @@ const getScoreClass = (score: number | null) => {
   return 'red'
 }
 
-const getScoreBarClass = (score: number | null) => {
-  if (score === null) return 'gray'
-  if (score >= 80) return 'green'
-  if (score >= 60) return 'orange'
-  return 'red'
-}
-
 onMounted(async () => {
   const id = Number(route.params.id)
   await store.fetchProjectDetail(id)
@@ -280,6 +250,9 @@ onMounted(async () => {
   const res = await getKeyProjects()
   keyProjects.value = res.data
 })
+
+const keyProjects = ref<KeyProject[]>([])
+const getKeyProjectName = (id: number) => keyProjects.value.find(kp => kp.id === id)?.name || ''
 
 const project = computed(() => store.currentProject)
 
@@ -302,14 +275,13 @@ const getRatingClass = (rating: string) => {
   return 'red'
 }
 
-// ====== 成员每月评分相关 ======
 interface MemberScoreItem {
   member_id: number
   member_name: string
   sub_team_id: number
   sub_team_name: string
   latest_rating_month: { year: number; month: number } | null
-  scores: Record<string, number | null>  // key: "YYYY-MM", value: score 1-5
+  scores: Record<string, number | null>
 }
 
 const memberScores = ref<MemberScoreItem[]>([])
@@ -317,7 +289,6 @@ const memberScores = ref<MemberScoreItem[]>([])
 const fetchMemberScores = async (projectId: number) => {
   try {
     const res = await getMemberPerformance(projectId)
-    // 后端返回格式：{ months:[], rows:[{member_id, member_name, sub_team_name, latest_rating_month, scores:[{label,score},...]}] }
     const raw: any = res.data || []
     const rows = raw.rows || raw
     memberScores.value = (rows as any[]).map((row: any) => ({
@@ -332,12 +303,11 @@ const fetchMemberScores = async (projectId: number) => {
       }, {} as Record<string, number | null>),
     }))
   } catch (e) {
-    console.error('[ProjectDetail] fetchMemberScores error:', e)
+    console.error('[SpecialProjectDetail] fetchMemberScores error:', e)
     memberScores.value = []
   }
 }
 
-// 找到该成员所属子团队的最新评级月份
 const getMemberLatestRatingMonth = (memberId: number): { year: number; month: number } | null => {
   const item = memberScores.value.find(m => m.member_id === memberId)
   return item?.latest_rating_month || null
@@ -348,7 +318,6 @@ const getMemberScore = (memberId: number, _subTeamId: number): number | null => 
   if (!item || !item.scores) {
     return null
   }
-  // 优先取该成员所在子团队最新评级月份的得分
   const lr = item.latest_rating_month
   if (lr) {
     const key = `${lr.year}-${String(lr.month).padStart(2, '0')}`
@@ -391,7 +360,6 @@ const showMemberScoreInfo = (member: any, subTeam: any) => {
   alert(`${member.name} (${subTeam.name})\n所在子团队最新评级月份：${monthText}\n该月绩效得分：${text}`)
 }
 
-// 项目绩效等级：根据综合得分映射
 const perfLevel = computed(() => {
   const score = project.value?.score ?? 0
   if (score < 40) return { level: 1, label: '1分 差', class: 'level-poor' }
@@ -400,7 +368,6 @@ const perfLevel = computed(() => {
   if (score < 85) return { level: 4, label: '4分 优秀', class: 'level-excellent' }
   return { level: 5, label: '5分 卓越', class: 'level-outstanding' }
 })
-
 </script>
 
 <style scoped>
@@ -449,6 +416,18 @@ const perfLevel = computed(() => {
   margin: 0 0 12px;
   font-size: 22px;
   font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.special-badge {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 4px;
+  background: rgba(139, 92, 246, 0.15);
+  color: var(--accent-purple);
 }
 
 .hero-meta {
@@ -520,7 +499,6 @@ const perfLevel = computed(() => {
 .progress-fill.green { background: var(--accent-green); }
 .progress-fill.orange { background: var(--accent-orange); }
 .progress-fill.red { background: var(--accent-red); }
-.progress-fill.gray { background: var(--text-muted); }
 
 .tab-bar {
   display: flex;
@@ -593,13 +571,6 @@ const perfLevel = computed(() => {
   margin-left: 4px;
 }
 
-.goal-score-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
 .goal-score-value {
   font-size: 18px;
   font-weight: 700;
@@ -613,17 +584,6 @@ const perfLevel = computed(() => {
 .goal-score-date {
   font-size: 13px;
   color: var(--text-muted);
-}
-
-.goal-comment {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-top: 4px;
-  line-height: 1.5;
-}
-
-.goal-score-bar .progress-bar {
-  width: 100%;
 }
 
 .goal-summary {
@@ -826,47 +786,6 @@ const perfLevel = computed(() => {
   color: var(--accent-blue);
 }
 
-.pdf-fullscreen-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  background: rgba(0, 0, 0, 0.85);
-  display: flex;
-  flex-direction: column;
-}
-
-.pdf-fullscreen-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 24px;
-  color: white;
-  font-size: 14px;
-  font-weight: 600;
-  background: rgba(0, 0, 0, 0.5);
-}
-
-.pdf-fullscreen-close {
-  padding: 6px 16px;
-  border-radius: 6px;
-  border: 1px solid rgba(255,255,255,0.3);
-  background: transparent;
-  color: white;
-  cursor: pointer;
-  font-size: 13px;
-}
-
-.pdf-fullscreen-close:hover {
-  background: rgba(255,255,255,0.1);
-}
-
-.pdf-fullscreen-iframe {
-  flex: 1;
-  width: 100%;
-  border: none;
-  display: block;
-}
-
 .report-empty {
   padding: 20px;
   text-align: center;
@@ -933,18 +852,6 @@ const perfLevel = computed(() => {
   gap: 6px;
 }
 
-.st-member-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  padding: 4px 10px;
-  font-size: 13px;
-  font-weight: 500;
-}
-
 .st-member-role {
   font-size: 11px;
   color: var(--text-secondary);
@@ -994,13 +901,6 @@ const perfLevel = computed(() => {
 .st-member-score.score-low { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); }
 .st-member-score.score-non-core { background: rgba(148, 163, 184, 0.1); color: var(--text-muted); }
 
-.goal-unit-tag {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-left: 4px;
-  font-weight: 400;
-}
-
 .goal-extra-cell {
   text-align: center;
   font-size: 13px;
@@ -1042,20 +942,4 @@ const perfLevel = computed(() => {
   transition: background 0.15s;
 }
 .goal-desc-icon:hover { background: rgba(59,130,246,0.25); }
-
-.desc-modal-mask {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.35);
-  display: flex; align-items: center; justify-content: center; z-index: 999;
-}
-.desc-modal-box {
-  background: var(--bg-card, #1e293b); border-radius: 12px; padding: 24px 28px;
-  max-width: 460px; width: 90%; box-shadow: 0 8px 30px rgba(0,0,0,0.15);
-}
-.desc-modal-box h3 { margin: 0 0 14px; font-size: 16px; color: var(--text-primary, #e2e8f0); }
-.desc-content { line-height: 1.7; color: var(--text-secondary, #94a3b8); white-space: pre-wrap; margin: 0 0 18px; }
-.desc-close-btn {
-  padding: 6px 20px; background: #3b82f6; color: #fff;
-  border: none; border-radius: 6px; cursor: pointer; font-size: 13px;
-}
-.desc-close-btn:hover { background: #2563eb; }
 </style>
